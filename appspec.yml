@@ -1,11 +1,11 @@
 version: 0.0
 os: linux
 files:
-  - source: /sf_bot/main.py
+  - source: sf_bot/main.py
     destination: /tmp/main.py
-  - source: /requirements.txt
+  - source: requirements.txt
     destination: /tmp/requirements.txt
-  - source: /sf_bot/*  # Includes all files in sf_bot directory
+  - source: sf_bot/*
     destination: /tmp/sf_bot/
 permissions:
   - object: /tmp/main.py
