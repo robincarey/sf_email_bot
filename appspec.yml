@@ -5,5 +5,14 @@ files:
     destination: /tmp/main.py
   - source: /requirements.txt
     destination: /tmp/requirements.txt
-  - source: /src/*
-    destination: /tmp/
+  - source: /sf_bot/*  # Includes all files in sf_bot directory
+    destination: /tmp/sf_bot/
+permissions:
+  - object: /tmp/main.py
+    owner: root
+    group: root
+    mode: 755
+  - object: /tmp/sf_bot/*
+    owner: root
+    group: root
+    mode: 755
