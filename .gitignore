@@ -1,0 +1,5 @@
+# Virtual environment config
+venv/
+items_seen.json
+
+
