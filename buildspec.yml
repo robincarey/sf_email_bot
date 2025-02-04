@@ -3,7 +3,7 @@ version: 0.2
 phases:
   install:
     runtime-versions:
-      python: 3.11
+      python: 3.11.8
     commands:
       # Install the dependencies
       - pip install -r requirements.txt -t .  # Install to current directory
