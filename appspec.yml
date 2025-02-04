@@ -1,0 +1,9 @@
+version: 0.0
+os: linux
+files:
+  - source: /sf_bot/main.py
+    destination: /tmp/main.py
+  - source: /requirements.txt
+    destination: /tmp/requirements.txt
+  - source: /src/*
+    destination: /tmp/
