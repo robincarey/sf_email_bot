@@ -1,0 +1,20 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11.8
+    commands:
+      # Install dependencies
+      - pip install -r requirements.txt
+  build:
+    commands:
+      # Zip the code for Lambda deployment
+      - zip -r function.zip .
+  post_build:
+    commands:
+      - echo "Build completed."
+
+artifacts:
+  files:
+    - function.zip  # This will be deployed to Lambda
