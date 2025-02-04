@@ -5,19 +5,16 @@ phases:
     runtime-versions:
       python: 3.11.8
     commands:
-      # Install the dependencies
-      - pip install -r requirements.txt -t .  # Install to current directory
-
+      # Install dependencies
+      - pip install -r requirements.txt
   build:
     commands:
-      # Package the Lambda function into a ZIP file
-      - zip -r function.zip sf_bot main.py requirements.txt
-      - mv function.zip $CODEBUILD_SRC_DIR/function.zip  # Move to the artifact location
-
+      # Zip the code for Lambda deployment
+      - zip -r function.zip .
   post_build:
     commands:
       - echo "Build completed."
 
 artifacts:
   files:
-    - function.zip  # This is the file to be deployed to Lambda
+    - function.zip  # This will be deployed to Lambda
