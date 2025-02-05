@@ -3,15 +3,16 @@ version: 0.2
 phases:
   install:
     runtime-versions:
-      python: 3.11.8
+      python: 3.11
     commands:
-      # Install dependencies into the local directory
-      - pip install -r requirements.txt -t .
+      # Install dependencies inside sf_bot/sf_bot/
+      - pip install -r requirements.txt -t sf_bot/sf_bot/
 
   build:
     commands:
-      # Zip necessary files for Lambda deployment (excluding unnecessary files)
-      - zip -r function.zip main.py email_notifier.py broken_binding_sf.py -x "venv/*" "__pycache__/*"
+      # Navigate into sf_bot (where Python files are) before zipping
+      - cd sf_bot
+      - zip -r ../function.zip sf_bot
 
   post_build:
     commands:
@@ -19,5 +20,4 @@ phases:
 
 artifacts:
   files:
-    - function.zip  # Allows CodePipeline to send to AWS Lambda
-  discard-paths: yes  # Ensures only function.zip is kept
+    - function.zip  # This will be deployed to Lambda
