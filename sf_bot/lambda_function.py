@@ -11,8 +11,7 @@ from tabulate import tabulate
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 # Test vals
-RECIPIENT_EMAIL = "robin.carey@gmail.com"
-DATA_FILE = "items_seen.json"
+RECIPIENT_EMAIL = ""
 
 # Reading files from S3
 def read_file_from_s3(bucket_name, key):
