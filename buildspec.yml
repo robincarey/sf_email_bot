@@ -5,16 +5,19 @@ phases:
     runtime-versions:
       python: 3.11.8
     commands:
-      # Install dependencies
-      - pip install -r requirements.txt
+      # Install dependencies into the local directory
+      - pip install -r requirements.txt -t .
+
   build:
     commands:
-      # Zip the code for Lambda deployment
-      - zip -r function.zip .
+      # Zip necessary files for Lambda deployment (excluding unnecessary files)
+      - zip -r function.zip main.py email_notifier.py broken_binding_sf.py -x "venv/*" "__pycache__/*"
+
   post_build:
     commands:
       - echo "Build completed."
 
 artifacts:
   files:
-    - function.zip  # This will be deployed to Lambda
+    - function.zip  # Allows CodePipeline to send to AWS Lambda
+  discard-paths: yes  # Ensures only function.zip is kept
