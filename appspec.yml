@@ -4,3 +4,4 @@ Resources:
       Type: AWS::Lambda::Function
       Properties:
         Name: "sf_bot"
+        CurrentVersion: "1"
