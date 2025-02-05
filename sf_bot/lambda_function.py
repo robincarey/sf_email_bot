@@ -10,7 +10,7 @@ from tabulate import tabulate
 # Set up logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-
+# Test vals
 RECIPIENT_EMAIL = "robin.carey@gmail.com"
 DATA_FILE = "items_seen.json"
 
