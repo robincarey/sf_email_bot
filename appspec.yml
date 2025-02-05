@@ -5,3 +5,4 @@ Resources:
       Properties:
         Name: "sf_bot"
         CurrentVersion: "1"
+        Alias: "live"
