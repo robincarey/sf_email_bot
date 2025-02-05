@@ -21,3 +21,4 @@ phases:
 artifacts:
   files:
     - function.zip  # This will be deployed to Lambda
+    - appspec.yml
