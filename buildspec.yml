@@ -16,13 +16,7 @@ phases:
 
   post_build:
     commands:
-      - echo "Publishing new Lambda version..."
-      - aws lambda update-function-code --function-name sf_bot --zip-file fileb://function.zip
-      - export NEW_VERSION=$(aws lambda publish-version --function-name sf_bot --query 'Version' --output text)
-      - echo "New Lambda version: $NEW_VERSION"
-      - echo "Updating alias to point to $NEW_VERSION"
-      - eval aws lambda update-alias --function-name sf_bot --name live --function-version $NEW_VERSION
-      - echo "Build and deployment completed."
+      - echo "Build completed."
 
 artifacts:
   files:
