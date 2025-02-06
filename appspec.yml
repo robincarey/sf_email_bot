@@ -1,9 +1,0 @@
-version: 0.0
-Resources:
-  - TargetService:
-      Type: AWS::Lambda::Function
-      Properties:
-        Name: "sf_bot"
-        Alias: "live"
-        CurrentVersion: "1"
-        TargetVersion: "2"
