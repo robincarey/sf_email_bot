@@ -33,8 +33,8 @@ def load_seen_items():
     try:
         # Read the file content from S3
         file_content = read_file_from_s3(bucket, file_key)
-        # Parse the JSON content into a set of tuples
-        return {tuple(item) for item in json.loads(file_content)}  # Ensure tuples are returned
+        # Parse the JSON content into a list of dictionaries
+        return json.loads(file_content)
     except json.JSONDecodeError as e:
         logger.error(f"Error parsing JSON: {e}")
     except Exception as e:
@@ -46,7 +46,7 @@ def load_seen_items():
 
 # Save items to S3
 def save_seen_items(items):
-    json_data = json.dumps(list(items))
+    json_data = json.dumps(items, indent=2)
     byte_stream = BytesIO(json_data.encode('utf-8'))
 
     s3_client = boto3.client('s3')
@@ -61,11 +61,32 @@ def save_seen_items(items):
 # Compare previously seen items to current site listing
 def check_for_updates():
     seen_items = load_seen_items()
-    new_items = broken_binding_checks()
-    current_item_names = {(item['name'], item['price'], item['store'], item['link']) for item in new_items}
+    # Build a dictionary of dictionaries for faster searching for update types
+    seen_items_dict = {item['name']: {key: value for key, value in item.items() if key != 'name'} for item in seen_items}
 
+    new_items = broken_binding_checks()
+
+    #current_item_names = {(item['name'], item['price'], item['store'], item['link']) for item in new_items}
+
+    seen_set = {frozenset(s.items()) for s in seen_items}
+    new_set = {frozenset(n.items()) for n in new_items}
     # Find new unseen items
-    unseen_items = current_item_names - seen_items
+    unseen_items_set = new_set.difference(seen_set)
+    unseen_items = [dict(x) for x in unseen_items_set]
+
+    # Check items for differences
+    for book in unseen_items:
+        if book['name'] not in seen_items_dict.keys():
+            book['update_type'] = 'New Item'
+        elif book['price'] != seen_items_dict[book['name']]['price']:
+            new_price = seen_items_dict[book['name']]['price']
+            book['update_type'] = 'Price Change - Previously ' + new_price
+        elif book['store'] != seen_items_dict[book['name']]['store']:
+            book['update_type'] = 'Store Change'
+        elif book['link'] != seen_items_dict[book['name']]['link']:
+            book['update_type'] = 'URL Change'
+        else:
+            book['update_type'] = 'Unknown Change'
 
     if unseen_items:
         html_table = f"""
@@ -91,14 +112,16 @@ def check_for_updates():
                     <th style="padding: 8px; text-align: left;">Item Name</th>
                     <th style="padding: 8px; text-align: left;">Price</th>
                     <th style="padding: 8px; text-align: left;">Store</th>
+                    <th style="padding: 8px; text-align: left;">Update Type</th>
                 </tr>
             </thead>
             <tbody>
                 {''.join(f"<tr style='border-bottom: 1px solid #ddd;'>"
-                        f"<td style='padding: 8px;'><a href='{item[3]}'>"
-                        f"{item[0]}</a></td>"
-                        f"<td style='padding: 8px;'>{item[1]}</td>"
-                        f"<td style='padding: 8px;'>{item[2]}</td>"
+                        f"<td style='padding: 8px;'><a href='{item['link']}'>"
+                        f"{item['name']}</a></td>"
+                        f"<td style='padding: 8px;'>{item['price']}</td>"
+                        f"<td style='padding: 8px;'>{item['store']}</td>"
+                        f"<td style='padding: 8px;'>{item['update_type']}</td>"
                         f"</tr>" 
                         for item in unseen_items)
                 }
@@ -116,7 +139,7 @@ def check_for_updates():
         for email in recipient_emails:
             send_email("New Broken Binding Books Available!", message, email)
         logger.info("New books found and email sent!")
-        save_seen_items(current_item_names)
+        save_seen_items(new_items)
     else:
         logger.info("No new books found.")
         
@@ -147,4 +170,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-# Testing Github Actions to deploy to lambda

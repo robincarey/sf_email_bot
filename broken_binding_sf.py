@@ -9,7 +9,7 @@ def broken_binding_checks():
         {"url": "https://thebrokenbindingsub.com/collections/the-infirmary", "store": "The Infirmary"},
         {"url": "https://thebrokenbindingsub.com/collections/dragons-hoard", "store": "Dragon's Hoard"}
     ]
-    product_array = []
+    product_list = []
 
     # Define headers to mimic a real browser request (helps avoid being blocked)
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -42,15 +42,15 @@ def broken_binding_checks():
             )
             product_price = price_span.get_text(strip=True) if price_span else "No price found"
 
-            # Append extracted info to product_array
-            product_array.append({
+            # Append extracted info to product_list
+            product_list.append({
                 'name': product_name,
                 'price': product_price,
                 'store': store,
                 'link': link
             })
 
-    return product_array
+    return product_list
 
 if __name__ == "__main__":
     test_array = broken_binding_checks()
