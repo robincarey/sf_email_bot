@@ -4,14 +4,13 @@ from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
 import os
 
-
 load_dotenv()
+
 # Grab credentials from environmental vars
 SF_EMAIL_USERNAME = os.getenv("SF_EMAIL_USERNAME")
 SF_EMAIL_PASSWORD = os.getenv("SF_EMAIL_PASSWORD")
 
-
-def send_email(subject, body, to_email):
+def send_email(subject, body, to_email, is_html=True):
     from_email = SF_EMAIL_USERNAME
     password = SF_EMAIL_PASSWORD
 
@@ -21,8 +20,11 @@ def send_email(subject, body, to_email):
     msg['To'] = to_email
     msg['Subject'] = subject
 
-    # Add body
-    msg.attach(MIMEText(body, 'plain'))
+    # Attach the email body
+    if is_html:
+        msg.attach(MIMEText(body, 'html'))  # Send HTML content
+    else:
+        msg.attach(MIMEText(body, 'plain'))  # Send plain text content
 
     # Sending email
     try:
@@ -35,7 +37,6 @@ def send_email(subject, body, to_email):
     except Exception as e:
         print(f"Failed to send email: {e}")
 
-
 if __name__ == "__main__":
-    send_email("Test Subject", "This is a test email.", "robin.carey@gmail.com")
-    print(SF_EMAIL_USERNAME)
+    # Example usage
+    send_email("Test HTML Email", "<h1>This is a test email</h1><p>This is a paragraph in the email body.</p>", "robin.carey@gmail.com", is_html=True)

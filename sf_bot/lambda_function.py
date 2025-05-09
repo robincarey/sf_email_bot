@@ -1,17 +1,20 @@
 import json
 import os
 import logging
-from broken_binding_sf import broken_binding_sf
+from broken_binding_sf import broken_binding_checks
 from email_notifier import send_email
 import boto3
 from io import BytesIO
-from tabulate import tabulate
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Set up logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 # Test vals
-RECIPIENT_EMAIL = ""
+RECIPIENT_EMAILS = json.loads(os.getenv('RECIPIENT_EMAILS', '[]'))
+DATA_FILE = "items_seen.json"
 
 # Reading files from S3
 def read_file_from_s3(bucket_name, key):
@@ -60,21 +63,64 @@ def save_seen_items(items):
 # Compare previously seen items to current site listing
 def check_for_updates():
     seen_items = load_seen_items()
-    new_items = broken_binding_sf()
-    current_item_names = {(item['name'], item['price']) for item in new_items}
+    new_items = broken_binding_checks()
+    current_item_names = {(item['name'], item['price'], item['store'], item['link']) for item in new_items}
 
     # Find new unseen items
     unseen_items = current_item_names - seen_items
 
     if unseen_items:
-        headers = ["Item Name", "Price"]
-        table = tabulate(unseen_items, headers=headers, tablefmt="grid")
-        message = f"New items available:\n{table}"
-        send_email("New Store Items Available!", message, RECIPIENT_EMAIL)
-        logger.info("New items found and email sent!")
+        html_table = f"""
+        <style>
+            @media only screen and (max-width: 600px) {{
+                table {{
+                    width: 100%;
+                }}
+                th, td {{
+                    padding: 10px !important;
+                    font-size: 14px !important;
+                }}
+            }}
+            table {{
+                width: 100%;
+                max-width: 1200px;
+                margin: 0 auto;
+            }}
+        </style>
+        <table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; border-bottom: 1px solid #ddd;">
+            <thead style="background-color: #f2f2f2;">
+                <tr>
+                    <th style="padding: 8px; text-align: left;">Item Name</th>
+                    <th style="padding: 8px; text-align: left;">Price</th>
+                    <th style="padding: 8px; text-align: left;">Store</th>
+                </tr>
+            </thead>
+            <tbody>
+                {''.join(f"<tr style='border-bottom: 1px solid #ddd;'>"
+                        f"<td style='padding: 8px;'><a href='{item[3]}'>"
+                        f"{item[0]}</a></td>"
+                        f"<td style='padding: 8px;'>{item[1]}</td>"
+                        f"<td style='padding: 8px;'>{item[2]}</td>"
+                        f"</tr>" 
+                        for item in unseen_items)
+                }
+            </tbody>
+        </table>
+        """
+        message = f"""
+        <html>
+        <body>
+            <p>New book(s) available:</p>
+            {html_table}
+        </body>
+        </html>
+        """
+        for email in RECIPIENT_EMAILS:
+            send_email("New Broken Binding Books Available!", message, email)
+        logger.info("New books found and email sent!")
         save_seen_items(current_item_names)
     else:
-        logger.info("No new items found.")
+        logger.info("No new books found.")
         
 # The Lambda handler
 def lambda_handler(event, context):
