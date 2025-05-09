@@ -1,0 +1,42 @@
+name: Lambda Deployment
+
+on:
+  push:
+    branches:
+      - main  # Trigger this on pushes to the main branch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install pipenv
+        run: |
+          python -m pip install --upgrade pip
+          pip install pipenv
+          pip install awscli
+
+      - name: Install dependencies using pipenv
+        run: |
+          pipenv install --dev  # Install the dependencies as per the Pipfile.lock
+
+      - name: Deploy to Lambda
+        run: |
+          # Package Lambda function into a zip file
+          zip -r lambda-deploy.zip .  # Zip the project directory
+
+          # Configure AWS CLI
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws configure set region ${{ secrets.AWS_REGION }}
+
+          # Deploy the zip file to Lambda
+          aws lambda update-function-code --function-name sf_bot --zip-file fileb://lambda-deploy.zip
