@@ -18,15 +18,12 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install pipenv
+      - name: Install AWS CLI
         run: |
-          python -m pip install --upgrade pip
-          pip install pipenv
           pip install awscli
 
-      - name: Export and install dependencies locally
+      - name: Install dependencies locally
         run: |
-          pipenv lock --requirements > requirements.txt
           pip install -r requirements.txt -t .  # Install into current dir
 
       - name: Zip everything for Lambda
