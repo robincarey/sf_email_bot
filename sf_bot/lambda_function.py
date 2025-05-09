@@ -5,30 +5,28 @@ from broken_binding_sf import broken_binding_checks
 from email_notifier import send_email
 import boto3
 from io import BytesIO
-from dotenv import load_dotenv
 
-load_dotenv()
 
 # Set up logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-# Test vals
-RECIPIENT_EMAILS = json.loads(os.getenv('RECIPIENT_EMAILS', '[]'))
-DATA_FILE = "items_seen.json"
+# Set global vars from environment vars
+recipient_emails = json.loads(os.getenv('RECIPIENT_EMAILS', '[]'))
+bucket = os.getenv('BUCKET_NAME')
+file_key = os.getenv('FILE_PATH')
 
 # Reading files from S3
 def read_file_from_s3(bucket_name, key):
+    
     s3_client = boto3.client('s3')
     try:
         response = s3_client.get_object(Bucket=bucket_name, Key=key)
         content = response['Body'].read().decode('utf-8')
         return content
     except Exception as e:
+        print(f"BUCKET_NAME: {bucket}, FILE_PATH: {file_key}, RECIPIENT_EMAILS: {recipient_emails}")
         logger.error(f"Error reading from S3: {e}")
         raise
-
-bucket = os.getenv('BUCKET_NAME')
-file_key = os.getenv('FILE_PATH')
 
 # Load previous items from S3
 def load_seen_items():
@@ -40,7 +38,7 @@ def load_seen_items():
     except json.JSONDecodeError as e:
         logger.error(f"Error parsing JSON: {e}")
     except Exception as e:
-        logger.error(f"An unexpected error occurred: {e}")
+        logger.error(f"Error loading from S3: {e}")
     
     # Return an empty set if any error occurs
     return set()
@@ -115,7 +113,7 @@ def check_for_updates():
         </body>
         </html>
         """
-        for email in RECIPIENT_EMAILS:
+        for email in recipient_emails:
             send_email("New Broken Binding Books Available!", message, email)
         logger.info("New books found and email sent!")
         save_seen_items(current_item_names)
@@ -125,7 +123,7 @@ def check_for_updates():
 # The Lambda handler
 def lambda_handler(event, context):
     try:
-        check_for_updates()  # Call your function when Lambda is triggered
+        check_for_updates()  # Call function when Lambda is triggered
         return {
             'statusCode': 200,
             'body': json.dumps('Update check completed!')
@@ -136,3 +134,16 @@ def lambda_handler(event, context):
             'statusCode': 500,
             'body': json.dumps(f"Error: {e}")
         }
+
+# Main function for local testing
+def main():
+    
+    try:
+        check_for_updates()
+        print('Update check completed!')
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+if __name__ == '__main__':
+    main()
