@@ -30,8 +30,9 @@ jobs:
 
       - name: Deploy to Lambda
         run: |
-          # Package Lambda function into a zip file
-          zip -r lambda-deploy.zip .  # Zip the project directory
+          cd sf_bot                       # Navigate into project folder
+          zip -r ../lambda-deploy.zip .   # Zip the contents, not the folder
+          cd ..
 
           # Configure AWS CLI
           aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
