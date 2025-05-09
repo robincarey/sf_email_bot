@@ -30,14 +30,28 @@ jobs:
 
       - name: Deploy to Lambda
         run: |
-          cd sf_bot                       # Navigate into project folder
-          zip -r ../lambda-deploy.zip .   # Zip the contents, not the folder
+          cd sf_bot
+
+          # Create a directory to hold dependencies
+          mkdir -p package
+
+          # Install dependencies into package/
+          pipenv lock --requirements > requirements.txt
+          pip install -r requirements.txt -t package
+
+          # Move into the package directory and zip everything
+          cd package
+          zip -r ../lambda-deploy.zip .
           cd ..
 
-          # Configure AWS CLI
+          # Add source files to the zip
+          zip -g lambda-deploy.zip *.py
+          zip -gr lambda-deploy.zip broken_binding_sf email_notifier
+
+          # Move back out and deploy
+          cd ..
           aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws configure set region ${{ secrets.AWS_REGION }}
 
-          # Deploy the zip file to Lambda
-          aws lambda update-function-code --function-name sf_bot --zip-file fileb://lambda-deploy.zip
+          aws lambda update-function-code --function-name sf_bot --zip-file fileb://sf_bot/lambda-deploy.zip
