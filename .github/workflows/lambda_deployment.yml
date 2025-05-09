@@ -35,20 +35,22 @@ jobs:
           # Create a directory to hold dependencies
           mkdir -p package
 
-          # Install dependencies into package/
-          pipenv lock --requirements > requirements.txt
+          # Freeze installed dependencies into requirements.txt
+          pipenv run pip freeze > requirements.txt
+
+          # Install dependencies into the package directory
           pip install -r requirements.txt -t package
 
-          # Move into the package directory and zip everything
+          # Move into the package directory and zip all dependencies
           cd package
           zip -r ../lambda-deploy.zip .
           cd ..
 
-          # Add source files to the zip
+          # Add source code to the zip
           zip -g lambda-deploy.zip *.py
           zip -gr lambda-deploy.zip broken_binding_sf email_notifier
 
-          # Move back out and deploy
+          # Deploy to Lambda
           cd ..
           aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
