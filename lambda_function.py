@@ -79,8 +79,8 @@ def check_for_updates():
         if book['name'] not in seen_items_dict.keys():
             book['update_type'] = 'New Item'
         elif book['price'] != seen_items_dict[book['name']]['price']:
-            new_price = seen_items_dict[book['name']]['price']
-            book['update_type'] = 'Price Change - Previously ' + new_price
+            old_price = seen_items_dict[book['name']]['price']
+            book['update_type'] = 'Price Change - Previously ' + old_price
         elif book['store'] != seen_items_dict[book['name']]['store']:
             book['update_type'] = 'Store Change'
         elif book['link'] != seen_items_dict[book['name']]['link']:
