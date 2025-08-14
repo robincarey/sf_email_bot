@@ -1,5 +1,7 @@
 # Virtual environment config
 venv/
+.direnv/
+.envrc
 items_seen.json
 .idea/
 packages/
