@@ -63,11 +63,7 @@ def check_for_updates():
     seen_items = load_seen_items()
     # Build a dictionary of dictionaries for faster searching for update types
     seen_items_dict = {item['name']: {key: value for key, value in item.items() if key != 'name'} for item in seen_items}
-
     new_items = broken_binding_checks()
-
-    #current_item_names = {(item['name'], item['price'], item['store'], item['link']) for item in new_items}
-
     seen_set = {frozenset(s.items()) for s in seen_items}
     new_set = {frozenset(n.items()) for n in new_items}
     # Find new unseen items
