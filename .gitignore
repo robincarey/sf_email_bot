@@ -9,3 +9,4 @@ my_deployment_package.zip
 .DS_Store
 **/__pycache__/
 recipients.json
+add_recipients.sh
