@@ -11,55 +11,89 @@ from io import BytesIO
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 # Set global vars from environment vars
-recipient_emails = json.loads(os.getenv('RECIPIENT_EMAILS', '[]'))
 bucket = os.getenv('BUCKET_NAME')
 file_key = os.getenv('FILE_PATH')
+run_mode = os.getenv('RUN_MODE', 'prod').lower() # prod or dev, dev for local testing
+
+# Get the appropriate file key for the run mode
+def get_state_file_key():
+    if run_mode == "dev":
+        return os.getenv("DEV_FILE_KEY") or file_key
+    return file_key
+
+# Load recipients from S3 or env var
+def load_recipients():
+    env_list = json.loads(os.getenv("RECIPIENT_EMAILS", "[]"))
+    admin_list = json.loads(os.getenv("ADMIN_EMAILS", "[]"))
+    recipients_key = os.getenv("RECIPIENTS_KEY")  # <-- runtime read
+
+    if not bucket or not recipients_key:
+        return env_list if run_mode != "prod" else admin_list
+
+    try:
+        content = read_file_from_s3(bucket, recipients_key)
+        data = json.loads(content)
+        if isinstance(data, list):
+            return sorted(set(data))
+        if isinstance(data, dict) and "recipients" in data:
+            return sorted(set(data["recipients"]))
+        logger.error("Recipients JSON must be a list or a dict with 'recipients'.")
+    except Exception as e:
+        logger.error(f"Could not load recipients from S3: {e}")
+
+    return admin_list if run_mode == "prod" else env_list
+
+# Load real recipients for production, local dev only uses env var
+def get_recipients_for_run():
+    if run_mode == "prod":
+        recips = load_recipients()
+        logger.info(f"RUN_MODE=prod using S3 recipients (count={len(recips)})")
+        return recips
+
+    recips = sorted(set(json.loads(os.getenv("RECIPIENT_EMAILS", "[]"))))
+    logger.info(f"RUN_MODE=dev using env recipients (count={len(recips)})")
+    return recips
 
 # Reading files from S3
 def read_file_from_s3(bucket_name, key):
-    
     s3_client = boto3.client('s3')
     try:
         response = s3_client.get_object(Bucket=bucket_name, Key=key)
         content = response['Body'].read().decode('utf-8')
         return content
     except Exception as e:
-        print(f"BUCKET_NAME: {bucket}, FILE_PATH: {file_key}, RECIPIENT_EMAILS: {recipient_emails}")
+        print(f"BUCKET_NAME: {bucket}, FILE_PATH: {file_key}")
         logger.error(f"Error reading from S3: {e}")
         raise
 
 # Load previous items from S3
 def load_seen_items():
+    state_key = get_state_file_key()
     try:
-        # Read the file content from S3
-        file_content = read_file_from_s3(bucket, file_key)
-        # Parse the JSON content into a list of dictionaries
+        file_content = read_file_from_s3(bucket, state_key)
         return json.loads(file_content)
     except json.JSONDecodeError as e:
         logger.error(f"Error parsing JSON: {e}")
     except Exception as e:
         logger.error(f"Error loading from S3: {e}")
-    
-    # Return an empty set if any error occurs
-    return set()
-
+    return []
 
 # Save items to S3
 def save_seen_items(items):
+    state_key = get_state_file_key()
     json_data = json.dumps(items, indent=2)
-    byte_stream = BytesIO(json_data.encode('utf-8'))
+    byte_stream = BytesIO(json_data.encode("utf-8"))
 
-    s3_client = boto3.client('s3')
-
+    s3_client = boto3.client("s3")
     try:
-        s3_client.upload_fileobj(byte_stream, bucket, file_key)
-        logger.info(f"File uploaded successfully to {bucket}/{file_key}")
+        s3_client.upload_fileobj(byte_stream, bucket, state_key)
+        logger.info(f"File uploaded successfully to {bucket}/{state_key}")
     except Exception as e:
         logger.error(f"Error uploading to S3: {e}")
 
-
 # Compare previously seen items to current site listing
 def check_for_updates():
+    recipient_emails = get_recipients_for_run()
     seen_items = load_seen_items()
     # Build a dictionary of dictionaries for faster searching for update types
     seen_items_dict = {item['name']: {key: value for key, value in item.items() if key != 'name'} for item in seen_items}
