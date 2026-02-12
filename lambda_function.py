@@ -20,12 +20,6 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Get the appropriate file key for the run mode
-def get_state_file_key():
-    if run_mode == "dev":
-        return os.getenv("DEV_FILE_KEY") or file_key
-    return file_key
-
 # Load recipients from S3 or env var
 def load_recipients():
     env_list = json.loads(os.getenv("RECIPIENT_EMAILS", "[]"))
@@ -52,7 +46,7 @@ def load_recipients():
 def get_recipients_for_run():
     if run_mode == "prod":
         recips = load_recipients()
-        logger.info(f"RUN_MODE=prod using S3 recipients (count={len(recips)})")
+        logger.info(f"RUN_MODE=prod using recipients from supabase db (count={len(recips)})")
         return recips
 
     recips = sorted(set(json.loads(os.getenv("RECIPIENT_EMAILS", "[]"))))
