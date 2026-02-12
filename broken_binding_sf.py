@@ -15,7 +15,18 @@ def broken_binding_checks():
 
     # Fire up a session with appropriate headers
     with requests.Session() as session:
-        session.headers.update({"User-Agent": "Mozilla/5.0"})
+        session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Connection": "keep-alive",
+            "Referer": "https://thebrokenbindingsub.com/"
+        })
+        try:
+            session.get("https://thebrokenbindingsub.com/", timeout=10)
+            time.sleep(random.uniform(0.2, 0.5))
+        except requests.RequestException:
+            pass  # continue anyway
 
         for entry in urls:
             url = entry['url']
@@ -29,6 +40,9 @@ def broken_binding_checks():
                 print(f"Error fetching collection {url}: {e}")
                 continue
             soup = BeautifulSoup(response.content, "html.parser")
+
+            # Small delay after collection fetch
+            time.sleep(random.uniform(0.2, 0.5))
 
             # Find all list items with the grid product class
             product_items = soup.find_all("li", class_="grid__item")
