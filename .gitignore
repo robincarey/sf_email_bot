@@ -9,3 +9,4 @@ my_deployment_package.zip
 .DS_Store
 **/__pycache__/
 local/
+supabase/
