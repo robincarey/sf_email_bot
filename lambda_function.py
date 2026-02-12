@@ -1,11 +1,11 @@
 import json
 import os
 import logging
+import boto3
+from supabase import create_client
 from broken_binding_sf import broken_binding_checks
 from email_notifier import send_email
-import boto3
 from io import BytesIO
-
 
 # Set up logging
 logger = logging.getLogger()
@@ -14,6 +14,11 @@ logger.setLevel(logging.INFO)
 bucket = os.getenv('BUCKET_NAME')
 file_key = os.getenv('FILE_PATH')
 run_mode = os.getenv('RUN_MODE', 'prod').lower() # prod or dev, dev for local testing
+
+# Connect to supabase db
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Get the appropriate file key for the run mode
 def get_state_file_key():
@@ -66,30 +71,35 @@ def read_file_from_s3(bucket_name, key):
         logger.error(f"Error reading from S3: {e}")
         raise
 
-# Load previous items from S3
+# Load previous items from supabase db
 def load_seen_items():
-    state_key = get_state_file_key()
     try:
-        file_content = read_file_from_s3(bucket, state_key)
-        return json.loads(file_content)
-    except json.JSONDecodeError as e:
-        logger.error(f"Error parsing JSON: {e}")
+        response = (
+            supabase
+            .table("items_seen")
+            .select("name, price, store, link, in_stock")
+            .execute()
+        )
+        return response.data or []
     except Exception as e:
-        logger.error(f"Error loading from S3: {e}")
-    return []
+        logger.error(f"Error loading from Supabase: {e}")
+        return []
 
-# Save items to S3
+# Save items to supabase db
 def save_seen_items(items):
-    state_key = get_state_file_key()
-    json_data = json.dumps(items, indent=2)
-    byte_stream = BytesIO(json_data.encode("utf-8"))
+    if not items:
+        return
 
-    s3_client = boto3.client("s3")
     try:
-        s3_client.upload_fileobj(byte_stream, bucket, state_key)
-        logger.info(f"File uploaded successfully to {bucket}/{state_key}")
+        response = (
+            supabase
+            .table("items_seen")
+            .upsert(items, on_conflict="link")
+            .execute()
+        )
+        logger.info(f"Upserted {len(items)} items into Supabase.")
     except Exception as e:
-        logger.error(f"Error uploading to S3: {e}")
+        logger.error(f"Error saving to Supabase: {e}")
 
 # Compare previously seen items to current site listing
 def check_for_updates():
@@ -98,6 +108,9 @@ def check_for_updates():
     # Build a dictionary of dictionaries for faster searching for update types
     seen_items_dict = {item['name']: {key: value for key, value in item.items() if key != 'name'} for item in seen_items}
     new_items = broken_binding_checks()
+    if not new_items:
+        logger.info("Scraper returned no items; skipping diff and upsert.")
+        return
     seen_set = {frozenset(s.items()) for s in seen_items}
     new_set = {frozenset(n.items()) for n in new_items}
     # Find new unseen items
@@ -117,61 +130,68 @@ def check_for_updates():
             book['update_type'] = 'URL Change'
         else:
             book['update_type'] = 'Unknown Change'
-
-    if unseen_items:
-        html_table = f"""
-        <style>
-            @media only screen and (max-width: 600px) {{
+    try:
+        if unseen_items:
+            html_table = f"""
+            <style>
+                @media only screen and (max-width: 600px) {{
+                    table {{
+                        width: 100%;
+                    }}
+                    th, td {{
+                        padding: 10px !important;
+                        font-size: 14px !important;
+                    }}
+                }}
                 table {{
                     width: 100%;
+                    max-width: 1200px;
+                    margin: 0 auto;
                 }}
-                th, td {{
-                    padding: 10px !important;
-                    font-size: 14px !important;
-                }}
-            }}
-            table {{
-                width: 100%;
-                max-width: 1200px;
-                margin: 0 auto;
-            }}
-        </style>
-        <table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; border-bottom: 1px solid #ddd;">
-            <thead style="background-color: #f2f2f2;">
-                <tr>
-                    <th style="padding: 8px; text-align: left;">Item Name</th>
-                    <th style="padding: 8px; text-align: left;">Price</th>
-                    <th style="padding: 8px; text-align: left;">Store</th>
-                    <th style="padding: 8px; text-align: left;">Update Type</th>
-                </tr>
-            </thead>
-            <tbody>
-                {''.join(f"<tr style='border-bottom: 1px solid #ddd;'>"
-                        f"<td style='padding: 8px;'><a href='{item['link']}'>"
-                        f"{item['name']}</a></td>"
-                        f"<td style='padding: 8px;'>{item['price']}</td>"
-                        f"<td style='padding: 8px;'>{item['store']}</td>"
-                        f"<td style='padding: 8px;'>{item['update_type']}</td>"
-                        f"</tr>" 
-                        for item in unseen_items)
-                }
-            </tbody>
-        </table>
-        """
-        message = f"""
-        <html>
-        <body>
-            <p>New book(s) available:</p>
-            {html_table}
-        </body>
-        </html>
-        """
-        for email in recipient_emails:
-            send_email("New Broken Binding Books Available!", message, email)
-        logger.info("New books found and email sent!")
+            </style>
+            <table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; border-bottom: 1px solid #ddd;">
+                <thead style="background-color: #f2f2f2;">
+                    <tr>
+                        <th style="padding: 8px; text-align: left;">Item Name</th>
+                        <th style="padding: 8px; text-align: left;">Price</th>
+                        <th style="padding: 8px; text-align: left;">Store</th>
+                        <th style="padding: 8px; text-align: left;">Update Type</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {''.join(f"<tr style='border-bottom: 1px solid #ddd;'>"
+                            f"<td style='padding: 8px;'><a href='{item['link']}'>"
+                            f"{item['name']}</a></td>"
+                            f"<td style='padding: 8px;'>{item['price']}</td>"
+                            f"<td style='padding: 8px;'>{item['store']}</td>"
+                            f"<td style='padding: 8px;'>{item['update_type']}</td>"
+                            f"</tr>" 
+                            for item in unseen_items)
+                    }
+                </tbody>
+            </table>
+            """
+            message = f"""
+            <html>
+            <body>
+                <p>New book(s) available:</p>
+                {html_table}
+            </body>
+            </html>
+            """
+            for email in recipient_emails:
+                try:
+                    send_email("New Broken Binding Books Available!", message, email)
+                except Exception as e:
+                    logger.error(f"Failed to send email to {email}: {e}")
+            logger.info("New books found and email sent!")
+        else:
+            logger.info("No new books found.")
+    except Exception as e:
+        logger.error(f"Email send failed: {e}")
+    finally:
+        # Update db with scraped items
         save_seen_items(new_items)
-    else:
-        logger.info("No new books found.")
         
 # The Lambda handler
 def lambda_handler(event, context):

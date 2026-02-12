@@ -63,15 +63,14 @@ def broken_binding_checks():
                 )
                 product_price = price_span.get_text(strip=True) if price_span else "No price found"
 
-                # Append extracted info to product_list
-                if in_stock:
-                    product_list.append({
-                        'name': product_name,
-                        'price': product_price,
-                        'store': store,
-                        'link': link,
-                        'in_stock': in_stock
-                    })
+                # Add extracted info to product_list
+                product_list.append({
+                    'name': product_name,
+                    'price': product_price,
+                    'store': store,
+                    'link': link,
+                    'in_stock': in_stock
+                })
                 
                 # Small delay between scraping products to limit hit to server
                 time.sleep(random.uniform(0.2, 0.6))
