@@ -13,35 +13,32 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      # AWS credentials (better than aws configure)
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          python-version: '3.11'
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Ensure AWS CLI
-        run: |
-          aws --version || pip install awscli
-
-      - name: Build Lambda package
+      - name: Build Lambda package in Lambda-compatible container
         run: |
           set -e
           rm -rf build lambda-deploy.zip
           mkdir -p build
 
-          # Upgrade tooling
-          python -m pip install --upgrade pip setuptools wheel
-
-          # Install dependencies into build/
-          pip install -r requirements.txt -t build/
-
-          # Copy Lambda source files into build/
-          cp lambda_function.py build/
-          cp broken_binding_sf.py build/
-          cp email_notifier.py build/
-
-      - name: Sanity check imports
-        run: |
-          PYTHONPATH=build python -c "import supabase, pydantic_core, requests, bs4; print('imports ok')"
+          docker run --rm \
+            -v "$PWD":/var/task \
+            -w /var/task \
+            public.ecr.aws/sam/build-python3.11:latest \
+            /bin/bash -lc "
+              python -m pip install --upgrade pip setuptools wheel &&
+              pip install -r requirements.txt -t build/ &&
+              cp lambda_function.py build/ &&
+              cp broken_binding_sf.py build/ &&
+              cp email_notifier.py build/ &&
+              PYTHONPATH=build python -c 'import supabase, pydantic_core, requests, bs4; print(\"imports ok\")'
+            "
 
       - name: Zip Lambda artifact
         run: |
@@ -51,10 +48,6 @@ jobs:
           ls -lh lambda-deploy.zip
 
       - name: Deploy to Lambda
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
         run: |
           aws lambda update-function-code \
             --function-name sf_bot \
