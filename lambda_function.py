@@ -1,7 +1,6 @@
 import json
 import os
 import logging
-import boto3
 from supabase import create_client
 from broken_binding_sf import broken_binding_checks
 from email_notifier import send_email
@@ -11,59 +10,31 @@ from io import BytesIO
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 # Set global vars from environment vars
-bucket = os.getenv('BUCKET_NAME')
-file_key = os.getenv('FILE_PATH')
 run_mode = os.getenv('RUN_MODE', 'prod').lower() # prod or dev, dev for local testing
-
 # Connect to supabase db
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Load recipients from S3 or env var
-def load_recipients():
-    env_list = json.loads(os.getenv("RECIPIENT_EMAILS", "[]"))
-    admin_list = json.loads(os.getenv("ADMIN_EMAILS", "[]"))
-    recipients_key = os.getenv("RECIPIENTS_KEY")  # <-- runtime read
-
-    if not bucket or not recipients_key:
-        return env_list if run_mode != "prod" else admin_list
-
-    try:
-        content = read_file_from_s3(bucket, recipients_key)
-        data = json.loads(content)
-        if isinstance(data, list):
-            return sorted(set(data))
-        if isinstance(data, dict) and "recipients" in data:
-            return sorted(set(data["recipients"]))
-        logger.error("Recipients JSON must be a list or a dict with 'recipients'.")
-    except Exception as e:
-        logger.error(f"Could not load recipients from S3: {e}")
-
-    return admin_list if run_mode == "prod" else env_list
-
-# Load real recipients for production, local dev only uses env var
+# Load recipients for production, local dev only uses env var
 def get_recipients_for_run():
     if run_mode == "prod":
-        recips = load_recipients()
+        # Load all user emails from supabase db
+        response = (
+            supabase
+            .table("users")
+            .select("email")
+            .eq("is_active", True)
+            .execute()
+        )
+        recips = [r["email"] for r in (response.data or [])]
         logger.info(f"RUN_MODE=prod using recipients from supabase db (count={len(recips)})")
-        return recips
 
-    recips = sorted(set(json.loads(os.getenv("RECIPIENT_EMAILS", "[]"))))
-    logger.info(f"RUN_MODE=dev using env recipients (count={len(recips)})")
+    else:
+        # Load admin emails for local dev
+        recips = sorted(set(json.loads(os.getenv("ADMIN_EMAILS", "[]"))))
+        logger.info(f"RUN_MODE=dev using admin emails (count={len(recips)})")
     return recips
-
-# Reading files from S3
-def read_file_from_s3(bucket_name, key):
-    s3_client = boto3.client('s3')
-    try:
-        response = s3_client.get_object(Bucket=bucket_name, Key=key)
-        content = response['Body'].read().decode('utf-8')
-        return content
-    except Exception as e:
-        print(f"BUCKET_NAME: {bucket}, FILE_PATH: {file_key}")
-        logger.error(f"Error reading from S3: {e}")
-        raise
 
 # Load previous items from supabase db
 def load_seen_items():
