@@ -100,7 +100,7 @@ def check_for_updates():
     recipient_emails = get_recipients_for_run()
     seen_items = load_seen_items()
     # Build a dictionary of dictionaries for faster searching for update types
-    seen_items_dict = {item['name']: {key: value for key, value in item.items() if key != 'name'} for item in seen_items}
+    seen_items_dict = {item['link']: {key: value for key, value in item.items() if key != 'link'} for item in seen_items}
     new_items = broken_binding_checks()
     if not new_items:
         logger.info("Scraper returned no items; skipping diff and upsert.")
@@ -113,19 +113,24 @@ def check_for_updates():
 
     # Check items for differences
     for book in unseen_items:
-        if book['name'] not in seen_items_dict.keys():
+        if book['link'] not in seen_items_dict:
             book['update_type'] = 'New Item'
-        elif book['price'] != seen_items_dict[book['name']]['price']:
-            old_price = seen_items_dict[book['name']]['price']
+        elif book['in_stock'] is True and seen_items_dict[book['link']]['in_stock'] is False:
+            book['update_type'] = 'Restocked'
+        elif book['in_stock'] is False and seen_items_dict[book['link']]['in_stock'] is True:
+            book['update_type'] = 'Out of Stock'
+        elif book['price'] != seen_items_dict[book['link']]['price']:
+            old_price = seen_items_dict[book['link']]['price']
             book['update_type'] = 'Price Change - Previously ' + old_price
-        elif book['store'] != seen_items_dict[book['name']]['store']:
+        elif book['store'] != seen_items_dict[book['link']]['store']:
             book['update_type'] = 'Store Change'
-        elif book['link'] != seen_items_dict[book['name']]['link']:
-            book['update_type'] = 'URL Change'
         else:
             book['update_type'] = 'Unknown Change'
+    # Only email items that are not out of stock
+    items_to_email = [i for i in unseen_items if i['update_type'] != 'Out of Stock']
+
     try:
-        if unseen_items:
+        if items_to_email:
             html_table = f"""
             <style>
                 @media only screen and (max-width: 600px) {{
@@ -160,7 +165,7 @@ def check_for_updates():
                             f"<td style='padding: 8px;'>{item['store']}</td>"
                             f"<td style='padding: 8px;'>{item['update_type']}</td>"
                             f"</tr>" 
-                            for item in unseen_items)
+                            for item in items_to_email)
                     }
                 </tbody>
             </table>
@@ -180,7 +185,7 @@ def check_for_updates():
                     logger.error(f"Failed to send email to {email}: {e}")
             logger.info("New books found and email sent!")
         else:
-            logger.info("No new books found.")
+            logger.info("No alert-worthy changes found.")
     except Exception as e:
         logger.error(f"Email send failed: {e}")
     finally:
