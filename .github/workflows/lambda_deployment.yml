@@ -6,34 +6,49 @@ on:
       - main
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      # AWS credentials (better than aws configure)
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          python-version: '3.11'
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Install AWS CLI
+      - name: Build Lambda package in Lambda-compatible container
         run: |
-          pip install awscli
+          set -e
+          rm -rf build lambda-deploy.zip
+          mkdir -p build
 
-      - name: Install dependencies locally
-        run: |
-          pip install -r requirements.txt -t .  # Install into current dir
+          docker run --rm \
+            -v "$PWD":/var/task \
+            -w /var/task \
+            public.ecr.aws/sam/build-python3.11:latest \
+            /bin/bash -lc "
+              python -m pip install --upgrade pip setuptools wheel &&
+              pip install -r requirements.txt -t build/ &&
+              cp lambda_function.py build/ &&
+              cp broken_binding_sf.py build/ &&
+              cp email_notifier.py build/ &&
+              PYTHONPATH=build python -c 'import supabase, pydantic_core, requests, bs4; print(\"imports ok\")'
+            "
 
-      - name: Zip everything for Lambda
+      - name: Zip Lambda artifact
         run: |
-          zip -r lambda-deploy.zip . -x ".git/*" ".github/*" "Pipfile*" "requirements.txt"
+          cd build
+          zip -r ../lambda-deploy.zip .
+          cd ..
+          ls -lh lambda-deploy.zip
 
       - name: Deploy to Lambda
         run: |
-          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws configure set region ${{ secrets.AWS_REGION }}
-
-          aws lambda update-function-code --function-name sf_bot --zip-file fileb://lambda-deploy.zip
+          aws lambda update-function-code \
+            --function-name sf_bot \
+            --zip-file fileb://lambda-deploy.zip
