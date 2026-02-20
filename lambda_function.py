@@ -4,7 +4,6 @@ import logging
 from supabase import create_client
 from broken_binding_sf import broken_binding_checks
 from email_notifier import send_email
-from io import BytesIO
 
 # Set up logging
 logger = logging.getLogger()
@@ -20,16 +19,19 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 def get_recipients_for_run():
     if run_mode == "prod":
         # Load all user emails from supabase db
-        response = (
-            supabase
-            .table("users")
-            .select("email")
-            .eq("is_active", True)
-            .execute()
-        )
-        recips = [r["email"] for r in (response.data or [])]
-        logger.info(f"RUN_MODE=prod using recipients from supabase db (count={len(recips)})")
-
+        try:
+            response = (
+                supabase
+                .table("users")
+                .select("email")
+                .eq("is_active", True)
+                .execute()
+            )
+            recips = [r["email"] for r in (response.data or [])]
+            logger.info(f"RUN_MODE=prod using recipients from supabase db (count={len(recips)})")
+        except Exception as e:
+            logger.error(f"Error loading recipients from Supabase: {e}")
+            recips = []
     else:
         # Load admin emails for local dev
         recips = sorted(set(json.loads(os.getenv("ADMIN_EMAILS", "[]"))))
@@ -81,27 +83,33 @@ def check_for_updates():
     # Find new unseen items
     unseen_items_set = new_set.difference(seen_set)
     unseen_items = [dict(x) for x in unseen_items_set]
-
     # Check items for differences
     for book in unseen_items:
-        if book['link'] not in seen_items_dict:
-            book['update_type'] = 'New Item'
-        elif book['in_stock'] is True and seen_items_dict[book['link']]['in_stock'] is False:
+        prev = seen_items_dict.get(book['link'])
+        if prev is None:
+            if book['in_stock'] is True:
+                book['update_type'] = 'New Item'
+            else:
+                book['update_type'] = 'New Item - Out of Stock'
+        elif book['in_stock'] is True and prev['in_stock'] is False:
             book['update_type'] = 'Restocked'
-        elif book['in_stock'] is False and seen_items_dict[book['link']]['in_stock'] is True:
+        elif book['in_stock'] is False and prev['in_stock'] is True:
             book['update_type'] = 'Out of Stock'
-        elif book['price'] != seen_items_dict[book['link']]['price']:
-            old_price = seen_items_dict[book['link']]['price']
-            book['update_type'] = 'Price Change - Previously ' + old_price
-        elif book['store'] != seen_items_dict[book['link']]['store']:
+        elif book['price'] != prev['price']:
+            book['update_type'] = 'Price Change - Previously ' + prev['price']
+        elif book['store'] != prev['store']:
             book['update_type'] = 'Store Change'
         else:
             book['update_type'] = 'Unknown Change'
-    # Only email items that are not out of stock
-    items_to_email = [i for i in unseen_items if i['update_type'] != 'Out of Stock']
-
+    # Only email items that are in stock
+    items_to_email = [i for i in unseen_items if i['in_stock'] is True]
     try:
-        if items_to_email:
+        # If users are empty, log error and return
+        if not recipient_emails:
+            logger.info("No recipients found; skipping email send.")
+        elif not items_to_email:
+            logger.info("No items to email; skipping email send.")
+        else:
             html_table = f"""
             <style>
                 @media only screen and (max-width: 600px) {{
@@ -155,8 +163,6 @@ def check_for_updates():
                 except Exception as e:
                     logger.error(f"Failed to send email to {email}: {e}")
             logger.info("New books found and email sent!")
-        else:
-            logger.info("No alert-worthy changes found.")
     except Exception as e:
         logger.error(f"Email send failed: {e}")
     finally:
