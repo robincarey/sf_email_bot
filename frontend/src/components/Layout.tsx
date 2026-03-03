@@ -5,6 +5,7 @@ import { useTheme } from '../context/ThemeContext'
 const navItems = [
   { to: '/', label: 'Dashboard' },
   { to: '/preferences', label: 'Preferences' },
+  { to: '/contact', label: 'Contact' },
   { to: '/account', label: 'Account' },
 ]
 
