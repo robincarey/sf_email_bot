@@ -189,7 +189,7 @@ export default function Dashboard() {
       {/* Recent alerts */}
       <div className="rounded-xl bg-surface border border-border p-6 shadow-sm">
         <h2 className="text-base font-semibold text-text mb-4">Recent Alerts</h2>
-        <RecentAlerts />
+        <RecentAlerts onWatchlistChange={fetchWatchlist} />
       </div>
     </div>
   )

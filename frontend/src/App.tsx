@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard'
 import Preferences from './pages/Preferences'
 import Account from './pages/Account'
 import Contact from './pages/Contact'
+import Items from './pages/Items'
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
               }
             >
               <Route index element={<Dashboard />} />
+              <Route path="items" element={<Items />} />
               <Route path="preferences" element={<Preferences />} />
               <Route path="contact" element={<Contact />} />
               <Route path="account" element={<Account />} />

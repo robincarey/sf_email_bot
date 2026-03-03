@@ -29,7 +29,11 @@ const eventBadgeColors: Record<string, string> = {
   'New Item - Out of Stock': 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
 }
 
-export default function RecentAlerts() {
+interface RecentAlertsProps {
+  onWatchlistChange?: () => void
+}
+
+export default function RecentAlerts({ onWatchlistChange }: RecentAlertsProps) {
   const { user } = useAuth()
   const [events, setEvents] = useState<AlertEvent[]>([])
   const [loading, setLoading] = useState(true)
@@ -95,6 +99,7 @@ export default function RecentAlerts() {
     }
 
     setTogglingId(null)
+    onWatchlistChange?.()
   }
 
   if (loading) {
