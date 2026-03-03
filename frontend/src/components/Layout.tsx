@@ -34,9 +34,12 @@ export default function Layout() {
       <header className="bg-surface border-b border-border">
         <div className="mx-auto max-w-5xl flex items-center justify-between px-4 py-3 sm:px-6">
           <div className="flex items-center gap-6">
-            <span className="text-lg font-semibold text-text tracking-tight">
-              SFF Stock Alerts
-            </span>
+            <div className="flex items-center gap-2.5">
+              <img src="/logo.png" alt="" className="h-10 w-auto" />
+              <span className="text-lg font-semibold text-text tracking-tight">
+                SFF Stock Alerts
+              </span>
+            </div>
             <nav className="hidden sm:flex gap-1">
               {navItems.map((item) => (
                 <NavLink
