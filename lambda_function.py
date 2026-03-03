@@ -97,6 +97,30 @@ def get_store_preferences_for_users(user_ids, run_id):
         return {}
 
 
+def get_watchlist_for_users(user_ids, run_id):
+    """Return {user_id: set(item_ids)} for watched items."""
+    if not user_ids:
+        return {}
+    try:
+        resp = (
+            get_supabase()
+            .table("watchlist")
+            .select("user_id, item_id")
+            .in_("user_id", list(user_ids))
+            .execute()
+        )
+        result = {}
+        for row in (resp.data or []):
+            uid = row["user_id"]
+            if uid not in result:
+                result[uid] = set()
+            result[uid].add(row["item_id"])
+        return result
+    except Exception as e:
+        logger.error(f"[{run_id}] Error loading watchlist: {e}")
+        return {}
+
+
 def load_seen_items(run_id):
     try:
         response = (
@@ -387,6 +411,7 @@ def check_for_updates():
 
     user_ids = [r["id"] for r in recipients if r["id"]]
     store_prefs = get_store_preferences_for_users(user_ids, run_id)
+    user_watchlists = get_watchlist_for_users(user_ids, run_id)
 
     email_subject = "SFF Stock Alert - New Books Available!"
 
@@ -395,8 +420,14 @@ def check_for_updates():
 
     for recip in recipients:
         enabled_stores = store_prefs.get(recip["id"])
+        watched_item_ids = user_watchlists.get(recip["id"], set())
+
         if enabled_stores is not None:
-            recip_items = [i for i in items_to_email if i.get("store") in enabled_stores]
+            recip_items = [
+                i for i in items_to_email
+                if i.get("store") in enabled_stores
+                or link_to_id.get(i["link"]) in watched_item_ids
+            ]
         else:
             recip_items = items_to_email
 

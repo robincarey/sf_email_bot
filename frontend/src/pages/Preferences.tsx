@@ -117,8 +117,11 @@ export default function Preferences() {
       {/* Per-store toggles */}
       <div className="rounded-xl bg-surface border border-border p-6 shadow-sm">
         <h3 className="text-sm font-semibold text-text mb-2">Store Alerts</h3>
-        <p className="text-sm text-text-muted mb-4">
+        <p className="text-sm text-text-muted mb-1">
           Choose which stores you want to receive alerts for.
+        </p>
+        <p className="text-xs text-text-muted mb-4">
+          Tip: You can watch individual items from the Dashboard to get alerts for them regardless of store settings.
         </p>
         <div className="divide-y divide-border">
           {stores.map((s) => (

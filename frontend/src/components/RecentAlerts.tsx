@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../context/AuthContext'
 
 interface ItemInfo {
   name: string
@@ -9,6 +10,7 @@ interface ItemInfo {
 
 interface AlertEvent {
   id: number
+  item_id: number
   event_type: string
   store: string
   event_time: string
@@ -28,14 +30,28 @@ const eventBadgeColors: Record<string, string> = {
 }
 
 export default function RecentAlerts() {
+  const { user } = useAuth()
   const [events, setEvents] = useState<AlertEvent[]>([])
   const [loading, setLoading] = useState(true)
+  const [watchedIds, setWatchedIds] = useState<Set<number>>(new Set())
+  const [togglingId, setTogglingId] = useState<number | null>(null)
+
+  const fetchWatchlist = useCallback(async () => {
+    if (!user) return
+    const { data } = await supabase
+      .from('watchlist')
+      .select('item_id')
+      .eq('user_id', user.id)
+    if (data) {
+      setWatchedIds(new Set(data.map((r) => r.item_id)))
+    }
+  }, [user])
 
   useEffect(() => {
     async function fetchEvents() {
       const { data, error } = await supabase
         .from('item_events')
-        .select('id, event_type, store, event_time, in_stock, old_value, new_value, items_seen!inner(name, link, store)')
+        .select('id, item_id, event_type, store, event_time, in_stock, old_value, new_value, items_seen!inner(name, link, store)')
         .order('event_time', { ascending: false })
         .limit(20)
 
@@ -53,7 +69,33 @@ export default function RecentAlerts() {
       setLoading(false)
     }
     fetchEvents()
-  }, [])
+    fetchWatchlist()
+  }, [fetchWatchlist])
+
+  const toggleWatch = async (itemId: number) => {
+    if (!user) return
+    setTogglingId(itemId)
+
+    if (watchedIds.has(itemId)) {
+      await supabase
+        .from('watchlist')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('item_id', itemId)
+      setWatchedIds((prev) => {
+        const next = new Set(prev)
+        next.delete(itemId)
+        return next
+      })
+    } else {
+      await supabase
+        .from('watchlist')
+        .insert({ user_id: user.id, item_id: itemId })
+      setWatchedIds((prev) => new Set(prev).add(itemId))
+    }
+
+    setTogglingId(null)
+  }
 
   if (loading) {
     return (
@@ -78,6 +120,7 @@ export default function RecentAlerts() {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border text-left text-text-muted">
+            <th className="pb-2 pr-2 font-medium w-8"></th>
             <th className="pb-2 pr-4 font-medium">Item</th>
             <th className="pb-2 pr-4 font-medium">Event</th>
             <th className="pb-2 pr-4 font-medium">Store</th>
@@ -87,8 +130,23 @@ export default function RecentAlerts() {
         <tbody>
           {events.map((evt) => {
             const item = Array.isArray(evt.items_seen) ? evt.items_seen[0] : evt.items_seen
+            const watched = watchedIds.has(evt.item_id)
             return (
             <tr key={evt.id} className="border-b border-border last:border-0">
+              <td className="py-3 pr-2">
+                <button
+                  onClick={() => toggleWatch(evt.item_id)}
+                  disabled={togglingId === evt.item_id}
+                  className="text-lg leading-none cursor-pointer disabled:opacity-50 hover:scale-110 transition-transform"
+                  title={watched ? 'Remove from watchlist' : 'Add to watchlist'}
+                >
+                  {watched ? (
+                    <span className="text-brand">&#9733;</span>
+                  ) : (
+                    <span className="text-text-muted">&#9734;</span>
+                  )}
+                </button>
+              </td>
               <td className="py-3 pr-4">
                 {item ? (
                   <a
