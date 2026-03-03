@@ -3,6 +3,7 @@ import os
 import re
 import uuid
 import logging
+from datetime import datetime, timezone
 from supabase import create_client
 from broken_binding_sf import broken_binding_checks
 from email_notifier import send_email
@@ -156,9 +157,56 @@ def insert_email_log_events(rows, run_id):
         logger.error(f"[{run_id}] Error inserting email_log_events: {e}")
 
 
+def insert_run_log(run_id):
+    """Insert a run_log row at the start of a run."""
+    try:
+        get_supabase().table("run_log").insert({"run_id": run_id}).execute()
+        logger.info(f"[{run_id}] Inserted run_log (status=started).")
+    except Exception as e:
+        logger.error(f"[{run_id}] Error inserting run_log: {e}")
+
+
+def update_run_log(run_id, **counters):
+    """Update run_log with final counters and status."""
+    try:
+        get_supabase().table("run_log").update({
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+            **counters,
+        }).eq("run_id", run_id).execute()
+        logger.info(f"[{run_id}] Updated run_log (status={counters.get('status', '?')}).")
+    except Exception as e:
+        logger.error(f"[{run_id}] Error updating run_log: {e}")
+
+
+def insert_daily_snapshots(items, link_to_id, run_id):
+    """Insert once-per-day item snapshots. Idempotent via unique(snapshot_date, item_id)."""
+    rows = []
+    for item in items:
+        item_id = link_to_id.get(item.get("link"))
+        if not item_id:
+            continue
+        rows.append({
+            "item_id": item_id,
+            "store": item.get("store"),
+            "in_stock": item.get("in_stock"),
+            "price": item.get("price"),
+            "price_cents": parse_price_cents(item.get("price")),
+        })
+    if not rows:
+        return
+    try:
+        get_supabase().table("item_status_daily").upsert(
+            rows, on_conflict="snapshot_date,item_id"
+        ).execute()
+        logger.info(f"[{run_id}] Upserted {len(rows)} daily snapshots.")
+    except Exception as e:
+        logger.error(f"[{run_id}] Error inserting daily snapshots: {e}")
+
+
 def check_for_updates():
     run_id = str(uuid.uuid4())
     logger.info(f"[{run_id}] Starting update check.")
+    insert_run_log(run_id)
 
     recipients = get_recipients_for_run(run_id)
     seen_items = load_seen_items(run_id)
@@ -170,6 +218,7 @@ def check_for_updates():
     new_items = broken_binding_checks()
     if not new_items:
         logger.warning(f"[{run_id}] Scraper returned no items; skipping diff and upsert.")
+        update_run_log(run_id, status="empty_scrape")
         return
 
     seen_set = {frozenset(s.items()) for s in seen_items}
@@ -223,6 +272,8 @@ def check_for_updates():
             "event_type": event_type,
             "old_value": old_value,
             "new_value": new_value,
+            "store": book.get("store"),
+            "in_stock": book.get("in_stock"),
         })
 
     logger.info(f"[{run_id}] Found {len(unseen_items)} changed items, {len(events)} events.")
@@ -234,11 +285,17 @@ def check_for_updates():
     # Step 1: Upsert items_seen so IDs exist for new items
     save_seen_items(new_items, run_id)
 
-    # Step 2: Fetch IDs for changed items
-    changed_links = list({e["link"] for e in events})
-    link_to_id = fetch_item_ids_by_link(changed_links, run_id)
+    # Step 2: Fetch IDs for ALL items (needed for daily snapshots + changed-item events)
+    all_links = [item["link"] for item in new_items]
+    all_link_to_id = fetch_item_ids_by_link(all_links, run_id)
 
-    # Step 3: Insert item_events
+    # Step 3: Insert daily snapshots (idempotent per day)
+    insert_daily_snapshots(new_items, all_link_to_id, run_id)
+
+    # Step 4: Fetch IDs for changed items only (subset for event building)
+    link_to_id = {link: all_link_to_id[link] for link in {e["link"] for e in events} if link in all_link_to_id}
+
+    # Step 5: Insert item_events
     event_rows = []
     for e in events:
         item_id = link_to_id.get(e["link"])
@@ -250,19 +307,23 @@ def check_for_updates():
             "event_type": e["event_type"],
             "old_value": e.get("old_value"),
             "new_value": e.get("new_value"),
+            "store": e.get("store"),
+            "in_stock": e.get("in_stock"),
         })
     inserted_events = insert_events(event_rows, run_id)
 
-    # Step 4: Send emails for in-stock items only
+    # Step 6: Send emails for in-stock items only
     items_to_email = [i for i in unseen_items if i.get("in_stock")]
 
     if not recipients:
         logger.info(f"[{run_id}] No recipients found; skipping email send.")
-        logger.info(f"[{run_id}] Update check complete.")
+        update_run_log(run_id, items_scraped=len(new_items), events_created=len(inserted_events),
+                       emails_attempted=0, emails_sent=0, status="success")
         return
     if not items_to_email:
         logger.info(f"[{run_id}] No in-stock items to email; skipping email send.")
-        logger.info(f"[{run_id}] Update check complete.")
+        update_run_log(run_id, items_scraped=len(new_items), events_created=len(inserted_events),
+                       emails_attempted=0, emails_sent=0, status="success")
         return
 
     # Determine which event IDs correspond to emailed (in-stock) items
@@ -331,7 +392,7 @@ def check_for_updates():
     sent_count = sum(1 for r in email_results if r["success"])
     logger.info(f"[{run_id}] Emails sent: {sent_count}/{len(email_results)}.")
 
-    # Step 5: Batch insert email_log rows
+    # Step 7: Batch insert email_log rows
     log_rows = [{
         "user_id": r["user_id"],
         "run_id": run_id,
@@ -341,7 +402,7 @@ def check_for_updates():
     } for r in email_results]
     inserted_logs = insert_email_log(log_rows, run_id)
 
-    # Step 6: Insert email_log_events junction rows
+    # Step 8: Insert email_log_events junction rows
     junction_rows = []
     for log_row in inserted_logs:
         for event_id in emailed_event_ids:
@@ -351,6 +412,15 @@ def check_for_updates():
             })
     insert_email_log_events(junction_rows, run_id)
 
+    # Step 9: Finalize run_log
+    update_run_log(
+        run_id,
+        items_scraped=len(new_items),
+        events_created=len(inserted_events),
+        emails_attempted=len(email_results),
+        emails_sent=sent_count,
+        status="success",
+    )
     logger.info(f"[{run_id}] Update check complete.")
 
 

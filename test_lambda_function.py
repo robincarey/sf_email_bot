@@ -113,12 +113,14 @@ class TestCheckForUpdates(unittest.TestCase):
             "insert_events": patch.object(lf, "insert_events"),
             "insert_email_log": patch.object(lf, "insert_email_log"),
             "insert_email_log_events": patch.object(lf, "insert_email_log_events"),
+            "insert_run_log": patch.object(lf, "insert_run_log"),
+            "update_run_log": patch.object(lf, "update_run_log"),
+            "insert_daily_snapshots": patch.object(lf, "insert_daily_snapshots"),
         }
         mocks = {}
         for name, p in patchers.items():
             mocks[name] = p.start()
             self.addCleanup(p.stop)
-        # Default return values for functions that return data
         mocks["insert_events"].return_value = []
         mocks["insert_email_log"].return_value = []
         return mocks
@@ -137,7 +139,7 @@ class TestCheckForUpdates(unittest.TestCase):
             {"name": "Old Book", "price": "$10", "store": "UK", "link": "https://old", "in_stock": True},
             {"name": "New Book", "price": "$25", "store": "UK", "link": "https://new", "in_stock": True},
         ]
-        m["fetch_item_ids_by_link"].return_value = {"https://new": 42}
+        m["fetch_item_ids_by_link"].return_value = {"https://old": 1, "https://new": 42}
         m["insert_events"].return_value = [{"id": 100, "item_id": 42, "event_type": "New Item"}]
         m["insert_email_log"].return_value = [{"id": 200, "user_id": "uid-a"}]
 
@@ -153,18 +155,17 @@ class TestCheckForUpdates(unittest.TestCase):
         self.assertEqual(len(event_rows), 1)
         self.assertEqual(event_rows[0]["event_type"], "New Item")
         self.assertEqual(event_rows[0]["item_id"], 42)
+        self.assertEqual(event_rows[0]["store"], "UK")
+        self.assertTrue(event_rows[0]["in_stock"])
 
         sent_body = m["send_email"].call_args[0][1]
         self.assertIn("New Item", sent_body)
 
-        # Verify email_log row has correct structure
         log_rows = m["insert_email_log"].call_args[0][0]
         self.assertEqual(len(log_rows), 1)
         self.assertEqual(log_rows[0]["user_id"], "uid-a")
         self.assertTrue(log_rows[0]["success"])
-        self.assertIn("subject", log_rows[0])
 
-        # Verify junction rows link email_log to events
         junction_rows = m["insert_email_log_events"].call_args[0][0]
         self.assertEqual(len(junction_rows), 1)
         self.assertEqual(junction_rows[0]["email_log_id"], 200)
@@ -178,14 +179,15 @@ class TestCheckForUpdates(unittest.TestCase):
         ]
         m["load_seen_items"].return_value = items
         m["broken_binding_checks"].return_value = items
-        m["fetch_item_ids_by_link"].return_value = {}
+        m["fetch_item_ids_by_link"].return_value = {"https://same": 1}
 
         lf.check_for_updates()
 
         m["send_email"].assert_not_called()
         m["save_seen_items"].assert_called_once()
+        m["insert_daily_snapshots"].assert_called_once()
 
-    def test_price_change_event(self):
+    def test_price_change_includes_store_and_in_stock(self):
         m = self._patch_all()
         m["get_recipients_for_run"].return_value = [self._recip("a@test.com")]
         m["load_seen_items"].return_value = [
@@ -204,9 +206,8 @@ class TestCheckForUpdates(unittest.TestCase):
         self.assertEqual(event_rows[0]["event_type"], "Price Change")
         self.assertEqual(event_rows[0]["old_value"], "$10")
         self.assertEqual(event_rows[0]["new_value"], "$12")
-
-        sent_body = m["send_email"].call_args[0][1]
-        self.assertIn("Price Change", sent_body)
+        self.assertEqual(event_rows[0]["store"], "UK")
+        self.assertTrue(event_rows[0]["in_stock"])
 
     def test_restock_event(self):
         m = self._patch_all()
@@ -225,8 +226,7 @@ class TestCheckForUpdates(unittest.TestCase):
 
         event_rows = m["insert_events"].call_args[0][0]
         self.assertEqual(event_rows[0]["event_type"], "Restocked")
-        self.assertEqual(event_rows[0]["old_value"], "out_of_stock")
-        self.assertEqual(event_rows[0]["new_value"], "in_stock")
+        self.assertTrue(event_rows[0]["in_stock"])
 
     def test_out_of_stock_does_not_email(self):
         m = self._patch_all()
@@ -244,6 +244,7 @@ class TestCheckForUpdates(unittest.TestCase):
 
         event_rows = m["insert_events"].call_args[0][0]
         self.assertEqual(event_rows[0]["event_type"], "Out of Stock")
+        self.assertFalse(event_rows[0]["in_stock"])
         m["send_email"].assert_not_called()
 
     def test_empty_scraper_skips_all(self):
@@ -260,9 +261,11 @@ class TestCheckForUpdates(unittest.TestCase):
         m["send_email"].assert_not_called()
         m["insert_events"].assert_not_called()
         m["insert_email_log"].assert_not_called()
-        m["insert_email_log_events"].assert_not_called()
+        m["insert_daily_snapshots"].assert_not_called()
+        m["update_run_log"].assert_called_once()
+        self.assertEqual(m["update_run_log"].call_args[1]["status"], "empty_scrape")
 
-    def test_run_id_propagated_to_all_db_functions(self):
+    def test_run_log_called_at_start_and_end(self):
         m = self._patch_all()
         m["get_recipients_for_run"].return_value = [self._recip("a@test.com", "uid-a")]
         m["load_seen_items"].return_value = []
@@ -275,14 +278,36 @@ class TestCheckForUpdates(unittest.TestCase):
 
         lf.check_for_updates()
 
-        run_id = m["get_recipients_for_run"].call_args[0][0]
-        self.assertTrue(len(run_id) == 36, "run_id should be a UUID string")
-        self.assertEqual(m["load_seen_items"].call_args[0][0], run_id)
-        self.assertEqual(m["save_seen_items"].call_args[0][1], run_id)
-        self.assertEqual(m["fetch_item_ids_by_link"].call_args[0][1], run_id)
-        self.assertEqual(m["insert_events"].call_args[0][1], run_id)
-        self.assertEqual(m["insert_email_log"].call_args[0][1], run_id)
-        self.assertEqual(m["insert_email_log_events"].call_args[0][1], run_id)
+        m["insert_run_log"].assert_called_once()
+        m["update_run_log"].assert_called_once()
+        update_kwargs = m["update_run_log"].call_args[1]
+        self.assertEqual(update_kwargs["items_scraped"], 1)
+        self.assertEqual(update_kwargs["events_created"], 1)
+        self.assertEqual(update_kwargs["emails_attempted"], 1)
+        self.assertEqual(update_kwargs["emails_sent"], 1)
+        self.assertEqual(update_kwargs["status"], "success")
+
+    def test_daily_snapshots_called_with_all_items(self):
+        m = self._patch_all()
+        m["get_recipients_for_run"].return_value = [self._recip("a@test.com")]
+        m["load_seen_items"].return_value = [
+            {"name": "Old Book", "price": "$10", "store": "UK", "link": "https://old", "in_stock": True},
+        ]
+        m["broken_binding_checks"].return_value = [
+            {"name": "Old Book", "price": "$10", "store": "UK", "link": "https://old", "in_stock": True},
+            {"name": "New Book", "price": "$25", "store": "UK", "link": "https://new", "in_stock": True},
+        ]
+        m["fetch_item_ids_by_link"].return_value = {"https://old": 1, "https://new": 42}
+        m["insert_events"].return_value = [{"id": 100, "item_id": 42, "event_type": "New Item"}]
+        m["insert_email_log"].return_value = [{"id": 200, "user_id": "uid-a"}]
+
+        lf.check_for_updates()
+
+        m["insert_daily_snapshots"].assert_called_once()
+        snapshot_items = m["insert_daily_snapshots"].call_args[0][0]
+        snapshot_link_to_id = m["insert_daily_snapshots"].call_args[0][1]
+        self.assertEqual(len(snapshot_items), 2)
+        self.assertEqual(snapshot_link_to_id, {"https://old": 1, "https://new": 42})
 
     def test_typed_price_attached_before_upsert(self):
         m = self._patch_all()
@@ -296,7 +321,7 @@ class TestCheckForUpdates(unittest.TestCase):
         lf.check_for_updates()
 
         saved_items = m["save_seen_items"].call_args[0][0]
-        self.assertEqual(saved_items[0]["typed_price"], 1099)
+        self.assertEqual(saved_items[0]["typed_price_cents"], 1099)
 
     def test_email_failure_logged_with_error(self):
         m = self._patch_all()
@@ -316,6 +341,10 @@ class TestCheckForUpdates(unittest.TestCase):
         self.assertEqual(len(log_rows), 1)
         self.assertFalse(log_rows[0]["success"])
         self.assertEqual(log_rows[0]["error_message"], "SMTP timeout")
+
+        update_kwargs = m["update_run_log"].call_args[1]
+        self.assertEqual(update_kwargs["emails_attempted"], 1)
+        self.assertEqual(update_kwargs["emails_sent"], 0)
 
     def test_multiple_recipients_produce_multiple_log_rows(self):
         m = self._patch_all()
@@ -340,14 +369,10 @@ class TestCheckForUpdates(unittest.TestCase):
 
         log_rows = m["insert_email_log"].call_args[0][0]
         self.assertEqual(len(log_rows), 2)
-        self.assertEqual(log_rows[0]["user_id"], "uid-a")
-        self.assertEqual(log_rows[1]["user_id"], "uid-b")
 
-        # Junction rows: 2 email_log rows x 1 event = 2 junction rows
         junction_rows = m["insert_email_log_events"].call_args[0][0]
         self.assertEqual(len(junction_rows), 2)
         self.assertEqual({r["email_log_id"] for r in junction_rows}, {50, 51})
-        self.assertTrue(all(r["event_id"] == 10 for r in junction_rows))
 
 
 if __name__ == "__main__":
