@@ -1,38 +1,111 @@
-<h1>📚 sf_email_bot</h1>
-Automated Email Notifications for New Book Releases<br><br>
+# sf_email_bot
 
-This Python application monitors The Broken Binding's shops (To the Stars, Dragon's Hoard, and The Infirmary) and sends email alerts when new special or limited edition books are added. It compares the list of items from the most recent previous run to the current run and triggers an email if any new or changed items are found.
+Automated email notifications for new and restocked special edition books from The Broken Binding.
 
-<h1>🚀 Features</h1>
-<ul>
-  <li><b>Automated Monitoring:</b> Periodically checks specified pages for new book listings.</li>
-  <li><b>Email Alerts:</b> Sends notifications containing the title and price of newly added or changed books.</li>
-  <li><b>AWS Lambda Deployment:</b> Runs as a serverless function, triggered at regular intervals via AWS EventBridge.</li>
-  <li><b>Continuous Deployment:</b> Integration with GitHub Actions for automated deployments to AWS Lambda.</li>
-</ul>
+## Overview
 
-<h1>🛠️ Installation Notes</h1>    
-A <code>requirements.txt</code> file is included for installing necessary dependencies after cloning.<br><br>
+This bot monitors The Broken Binding's storefronts (To the Stars, Dragon's Hoard, and The Infirmary), detects changes — new listings, restocks, price changes, stock-outs — and sends email alerts to subscribed users. All item and event data is persisted in Supabase for history tracking and future analytics.
 
-<b>Create a <code>.env</code> file or set the following environment variables:</b>
-<ul>
-  <li><b>BUCKET_NAME:</b> The S3 bucket used to save/load the item list from the previous run.</li>
-  <li><b>FILE_PATH:</b> The S3 directory path for the stored item file.</li>
-  <li><b>RECIPIENT_EMAILS:</b> The email addresses that should receive book alerts.</li>
-  <li><b>SF_EMAIL_USERNAME:</b> The email account used to send notifications.</li>
-  <li><b>SF_EMAIL_PASSWORD:</b> The password (or app password) for the sending email account.</li>
-</ul>
+## Features
 
-<h1>🔧 Future Enhancements</h1>
-<ul>
-  <li><b>Database Integration:</b> Use AWS RDS to track products more efficiently and support multiple users/emails.</li>
-  <li><b>Multi-Site Monitoring:</b> Extend support to monitor additional bookseller sites.</li>
-  <li><b>Front-end Interface:</b> Create a webpage for users to sign up, log in, and manage alert preferences.</li>
-  <li><b>User Authentication Management:</b> Use AWS Cognito to handle secure sign-up and sign-in workflows.</li>
-  <li><b>Email Enhancements:</b> Migrate to AWS SES for more reliable and scalable email delivery.</li>
-  <li><b>Additional Sites:</b> Add scraping modules for more special edition book retailers.</li>
-  <li><b>Analytics:</b> Build dashboards for email engagement and scraper timing/efficacy.</li>
-</ul>
+- **Multi-store scraping** with retry logic and exponential backoff
+- **Change detection** — new items, restocks, out-of-stock, price changes, store changes
+- **Per-event logging** — every detected change is recorded in `item_events` with a run-level UUID for traceability
+- **Per-recipient email tracking** — `email_log` records delivery success/failure per user, linked to events via `email_log_events`
+- **Structured logging** — every log line includes a `run_id` for easy CloudWatch debugging
+- **Normalized pricing** — `typed_price` stores price as integer cents alongside the display string
+- **Empty-scrape guard** — if the scraper returns no items, the diff and upsert are skipped to prevent data wipes
+- **AWS Lambda deployment** — runs serverless on a schedule via EventBridge
+- **CI/CD** — GitHub Actions builds and deploys to Lambda on push to `main`
 
-<h1>🤝 Contributing</h1>
-Contributions are welcome! Please fork the repository and submit a pull request for any enhancements or bug fixes.
+## Architecture
+
+```
+EventBridge (schedule)
+  └─ Lambda (lambda_function.py)
+       ├─ broken_binding_sf.py   — scrapes product pages
+       ├─ email_notifier.py      — sends email via SMTP
+       └─ Supabase (PostgreSQL)
+            ├─ users                — subscriber list
+            ├─ user_preferences     — per-user per-store notification settings
+            ├─ items_seen           — canonical item catalog
+            ├─ item_events          — change history per item
+            ├─ email_log            — one row per email sent
+            └─ email_log_events     — junction: email ↔ events
+```
+
+## Setup
+
+### Prerequisites
+
+- Python 3.11+
+- A [Supabase](https://supabase.com) project with the schema tables created
+- A Gmail account (or other SMTP provider) for sending notifications
+
+### Install dependencies
+
+```bash
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### Environment variables
+
+Create a `.env` file or set these in your Lambda configuration:
+
+| Variable | Description |
+|---|---|
+| `SUPABASE_URL` | Your Supabase project URL |
+| `SUPABASE_KEY` | Supabase service-role or anon key |
+| `SF_EMAIL_USERNAME` | SMTP sender email address |
+| `SF_EMAIL_PASSWORD` | SMTP password or app password |
+| `RUN_MODE` | `prod` (default) or `dev` |
+| `ADMIN_EMAILS` | JSON array of emails for dev-mode testing, e.g. `'["you@example.com"]'` |
+
+### Run locally
+
+```bash
+source venv/bin/activate
+python lambda_function.py
+```
+
+### Run tests
+
+```bash
+source venv/bin/activate
+python -m unittest test_lambda_function -v
+```
+
+## Deployment
+
+Pushes to `main` trigger the GitHub Actions workflow (`.github/workflows/lambda_deployment.yml`), which:
+
+1. Builds the Lambda package in a Docker container matching the Lambda Python 3.11 runtime
+2. Zips the artifact
+3. Deploys to the `sf_bot` Lambda function via `aws lambda update-function-code`
+
+Required GitHub Actions secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`.
+
+## Database schema
+
+| Table | Purpose |
+|---|---|
+| `users` | Subscribers with email and active status |
+| `user_preferences` | Per-user per-store notification toggles |
+| `items_seen` | Canonical item catalog; upserted on every scrape |
+| `item_events` | One row per detected change (restock, price change, etc.) |
+| `email_log` | One row per email sent, with success/failure and error message |
+| `email_log_events` | Junction linking each email to the events it covered |
+
+## Future enhancements
+
+- **Multi-site monitoring** — add scraping modules for more special edition book retailers
+- **User preferences filtering** — only notify users about stores they've opted into
+- **AWS SES migration** — replace SMTP with SES for scalable email delivery
+- **Analytics dashboard** — "wrapped"-style metrics (most restocked, longest in stock, etc.)
+- **Front-end interface** — sign-up, login, and preference management
+
+## Contributing
+
+Contributions are welcome. Fork the repository and submit a pull request for any enhancements or bug fixes.
