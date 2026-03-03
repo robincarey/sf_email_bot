@@ -35,7 +35,7 @@ export default function Layout() {
         <div className="mx-auto max-w-5xl flex items-center justify-between px-4 py-3 sm:px-6">
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2.5">
-              <img src="/logo.png" alt="" className="h-32 w-auto" />
+              <img src="/logo.png" alt="" className="h-24 w-auto" />
               <span className="text-lg font-semibold text-text tracking-tight">
                 SFF Stock Alerts
               </span>
