@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { Analytics } from '@vercel/analytics/react'
 import { AuthProvider } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -27,6 +28,7 @@ export default function App() {
               <Route path="account" element={<Account />} />
             </Route>
           </Routes>
+          <Analytics />
         </AuthProvider>
       </BrowserRouter>
     </ThemeProvider>
