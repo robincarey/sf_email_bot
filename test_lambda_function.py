@@ -1,205 +1,353 @@
 import json
 import unittest
-from unittest.mock import patch, call
+from unittest.mock import patch, MagicMock
 
 import lambda_function as lf
 
 
-class TestS3ConfigLoading(unittest.TestCase):
-    def setUp(self):
-        # Ensure module globals are set for tests
-        lf.bucket = "test-bucket"
-        lf.file_key = "sfbot/stock_files/items_seen.json"
+class TestParsePriceCents(unittest.TestCase):
 
-    # --- Recipients: loads flat list JSON from S3 and removes duplicates ---
-    @patch("lambda_function.read_file_from_s3")
-    def test_load_recipients_from_s3_list(self, mock_read):
-        mock_read.return_value = json.dumps([
-            "a@example.com",
-            "b@example.com",
-            "a@example.com"
+    def test_dollar_price(self):
+        self.assertEqual(lf.parse_price_cents("$10.99"), 1099)
+
+    def test_pound_price(self):
+        self.assertEqual(lf.parse_price_cents("£24.99"), 2499)
+
+    def test_whole_dollar(self):
+        self.assertEqual(lf.parse_price_cents("$10"), 1000)
+
+    def test_no_symbol(self):
+        self.assertEqual(lf.parse_price_cents("10.50"), 1050)
+
+    def test_none_input(self):
+        self.assertIsNone(lf.parse_price_cents(None))
+
+    def test_empty_string(self):
+        self.assertIsNone(lf.parse_price_cents(""))
+
+    def test_no_digits(self):
+        self.assertIsNone(lf.parse_price_cents("No price found"))
+
+
+class TestGetRecipientsForRun(unittest.TestCase):
+
+    @patch.object(lf, "get_supabase")
+    def test_prod_mode_returns_id_and_email(self, mock_get_sb):
+        lf.run_mode = "prod"
+        mock_sb = MagicMock()
+        mock_get_sb.return_value = mock_sb
+        mock_resp = MagicMock()
+        mock_resp.data = [
+            {"id": "uid-1", "email": "a@test.com"},
+            {"id": "uid-2", "email": "b@test.com"},
+        ]
+        mock_sb.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_resp
+
+        result = lf.get_recipients_for_run("test-run-id")
+        self.assertEqual(result, [
+            {"id": "uid-1", "email": "a@test.com"},
+            {"id": "uid-2", "email": "b@test.com"},
         ])
 
-        with patch.dict(
-            "os.environ",
-            {
-                "RECIPIENT_EMAILS": "[]",
-                "RECIPIENTS_KEY": "config/recipients.json"
-            }
-        ):
-            recipients = lf.load_recipients()
+    @patch.object(lf, "get_supabase")
+    def test_dev_mode_looks_up_user_ids(self, mock_get_sb):
+        lf.run_mode = "dev"
+        mock_sb = MagicMock()
+        mock_get_sb.return_value = mock_sb
+        mock_resp = MagicMock()
+        mock_resp.data = [{"id": "uid-dev", "email": "dev@test.com"}]
+        mock_sb.table.return_value.select.return_value.in_.return_value.execute.return_value = mock_resp
 
-        self.assertEqual(recipients, ["a@example.com", "b@example.com"])
+        with patch.dict("os.environ", {"ADMIN_EMAILS": '["dev@test.com"]'}):
+            result = lf.get_recipients_for_run("test-run-id")
+        self.assertEqual(result, [{"id": "uid-dev", "email": "dev@test.com"}])
 
-    # --- Recipients: loads dict JSON from S3 using "recipients" key ---
-    @patch("lambda_function.read_file_from_s3")
-    def test_load_recipients_from_s3_dict(self, mock_read):
-        mock_read.return_value = json.dumps({
-            "recipients": ["b@example.com", "a@example.com", "a@example.com"]
-        })
+    @patch.object(lf, "get_supabase")
+    def test_dev_mode_falls_back_to_none_id_on_db_error(self, mock_get_sb):
+        lf.run_mode = "dev"
+        mock_sb = MagicMock()
+        mock_get_sb.return_value = mock_sb
+        mock_sb.table.return_value.select.return_value.in_.return_value.execute.side_effect = Exception("db down")
 
-        with patch.dict(
-            "os.environ",
-            {
-                "RECIPIENT_EMAILS": "[]",
-                "RECIPIENTS_KEY": "config/recipients.json"
-            }
-        ):
-            recipients = lf.load_recipients()
+        with patch.dict("os.environ", {"ADMIN_EMAILS": '["dev@test.com"]'}):
+            result = lf.get_recipients_for_run("test-run-id")
+        self.assertEqual(result, [{"id": None, "email": "dev@test.com"}])
 
-        self.assertEqual(recipients, ["a@example.com", "b@example.com"])
 
-    # --- Recipients: falls back to env var when S3 read fails ---
-    @patch("lambda_function.read_file_from_s3")
-    def test_load_recipients_fallback_to_env_on_s3_error(self, mock_read):
-        mock_read.side_effect = Exception("S3 down")
+class TestLoadSeenItems(unittest.TestCase):
 
-        lf.run_mode = "dev"  # force dev behavior for this test
+    @patch.object(lf, "get_supabase")
+    def test_success(self, mock_get_sb):
+        mock_sb = MagicMock()
+        mock_get_sb.return_value = mock_sb
+        mock_resp = MagicMock()
+        mock_resp.data = [
+            {"name": "Book A", "price": "$10", "store": "UK", "link": "https://a", "in_stock": True},
+        ]
+        mock_sb.table.return_value.select.return_value.execute.return_value = mock_resp
 
-        with patch.dict(
-            "os.environ",
-            {
-                "RECIPIENT_EMAILS": '["env1@example.com","env2@example.com"]',
-                "RECIPIENTS_KEY": "config/recipients.json",
-            }
-        ):
-            recipients = lf.load_recipients()
-
-        self.assertEqual(recipients, ["env1@example.com", "env2@example.com"])
-
-    # --- Seen Items: successfully parses valid JSON list from S3 ---
-    @patch("lambda_function.read_file_from_s3")
-    def test_load_seen_items_success(self, mock_read):
-        mock_read.return_value = json.dumps([
-            {"name": "Book A", "price": "$10", "store": "UK", "link": "https://x"},
-        ])
-
-        items = lf.load_seen_items()
-        self.assertIsInstance(items, list)
+        items = lf.load_seen_items("test-run-id")
+        self.assertEqual(len(items), 1)
         self.assertEqual(items[0]["name"], "Book A")
 
-    # --- Seen Items: returns empty list when JSON is invalid ---
-    @patch("lambda_function.read_file_from_s3")
-    def test_load_seen_items_bad_json_returns_empty_list(self, mock_read):
-        mock_read.return_value = "not json"
-
-        items = lf.load_seen_items()
+    @patch.object(lf, "get_supabase")
+    def test_error_returns_empty(self, mock_get_sb):
+        mock_sb = MagicMock()
+        mock_get_sb.return_value = mock_sb
+        mock_sb.table.return_value.select.return_value.execute.side_effect = Exception("boom")
+        items = lf.load_seen_items("test-run-id")
         self.assertEqual(items, [])
 
-    # --- Seen Items: returns empty list when S3 read throws exception ---
-    @patch("lambda_function.read_file_from_s3")
-    def test_load_seen_items_exception_returns_empty_list(self, mock_read):
-        mock_read.side_effect = Exception("boom")
 
-        items = lf.load_seen_items()
-        self.assertEqual(items, [])
+class TestCheckForUpdates(unittest.TestCase):
 
-    # --- Updates: sends email to all recipients and saves new items when unseen exist ---
-    @patch("lambda_function.save_seen_items")
-    @patch("lambda_function.send_email")
-    @patch("lambda_function.broken_binding_checks")
-    @patch("lambda_function.load_seen_items")
-    @patch("lambda_function.load_recipients")
-    def test_check_for_updates_sends_email_and_saves(
-        self,
-        mock_load_recipients,
-        mock_load_seen_items,
-        mock_broken_binding_checks,
-        mock_send_email,
-        mock_save_seen_items,
-    ):
-        # Arrange
-        mock_load_recipients.return_value = ["a@example.com", "b@example.com"]
+    def _patch_all(self):
+        """Return a dict of active mocks for every external dependency."""
+        patchers = {
+            "get_recipients_for_run": patch.object(lf, "get_recipients_for_run"),
+            "load_seen_items": patch.object(lf, "load_seen_items"),
+            "broken_binding_checks": patch.object(lf, "broken_binding_checks"),
+            "send_email": patch("lambda_function.send_email"),
+            "save_seen_items": patch.object(lf, "save_seen_items"),
+            "fetch_item_ids_by_link": patch.object(lf, "fetch_item_ids_by_link"),
+            "insert_events": patch.object(lf, "insert_events"),
+            "insert_email_log": patch.object(lf, "insert_email_log"),
+            "insert_email_log_events": patch.object(lf, "insert_email_log_events"),
+        }
+        mocks = {}
+        for name, p in patchers.items():
+            mocks[name] = p.start()
+            self.addCleanup(p.stop)
+        # Default return values for functions that return data
+        mocks["insert_events"].return_value = []
+        mocks["insert_email_log"].return_value = []
+        return mocks
 
-        seen_items = [
-            {"name": "Old Book", "price": "$10", "store": "UK", "link": "https://old"},
+    def _recip(self, email, uid=None):
+        """Helper to build a recipient dict."""
+        return {"id": uid or f"uid-{email.split('@')[0]}", "email": email}
+
+    def test_new_item_sends_email_and_logs_events(self):
+        m = self._patch_all()
+        m["get_recipients_for_run"].return_value = [self._recip("a@test.com", "uid-a")]
+        m["load_seen_items"].return_value = [
+            {"name": "Old Book", "price": "$10", "store": "UK", "link": "https://old", "in_stock": True},
         ]
-        new_items = [
-            {"name": "Old Book", "price": "$10", "store": "UK", "link": "https://old"},
-            {"name": "New Book", "price": "$25", "store": "UK", "link": "https://new"},
+        m["broken_binding_checks"].return_value = [
+            {"name": "Old Book", "price": "$10", "store": "UK", "link": "https://old", "in_stock": True},
+            {"name": "New Book", "price": "$25", "store": "UK", "link": "https://new", "in_stock": True},
         ]
+        m["fetch_item_ids_by_link"].return_value = {"https://new": 42}
+        m["insert_events"].return_value = [{"id": 100, "item_id": 42, "event_type": "New Item"}]
+        m["insert_email_log"].return_value = [{"id": 200, "user_id": "uid-a"}]
 
-        mock_load_seen_items.return_value = seen_items
-        mock_broken_binding_checks.return_value = new_items
-
-        # Act
         lf.check_for_updates()
 
-        # Assert: email sent once per recipient
-        self.assertEqual(mock_send_email.call_count, 2)
+        m["save_seen_items"].assert_called_once()
+        m["send_email"].assert_called_once()
+        m["insert_events"].assert_called_once()
+        m["insert_email_log"].assert_called_once()
+        m["insert_email_log_events"].assert_called_once()
 
-        calls = mock_send_email.call_args_list
-        self.assertEqual(calls[0].args[0], "New Broken Binding Books Available!")
-        self.assertIsInstance(calls[0].args[1], str)
-        self.assertEqual(calls[0].args[2], "a@example.com")
+        event_rows = m["insert_events"].call_args[0][0]
+        self.assertEqual(len(event_rows), 1)
+        self.assertEqual(event_rows[0]["event_type"], "New Item")
+        self.assertEqual(event_rows[0]["item_id"], 42)
 
-        self.assertEqual(calls[1].args[0], "New Broken Binding Books Available!")
-        self.assertIsInstance(calls[1].args[1], str)
-        self.assertEqual(calls[1].args[2], "b@example.com")
+        sent_body = m["send_email"].call_args[0][1]
+        self.assertIn("New Item", sent_body)
 
-        mock_save_seen_items.assert_called_once_with(new_items)
+        # Verify email_log row has correct structure
+        log_rows = m["insert_email_log"].call_args[0][0]
+        self.assertEqual(len(log_rows), 1)
+        self.assertEqual(log_rows[0]["user_id"], "uid-a")
+        self.assertTrue(log_rows[0]["success"])
+        self.assertIn("subject", log_rows[0])
 
-    # --- Updates: sends nothing and does not save when no changes detected ---
-    @patch("lambda_function.save_seen_items")
-    @patch("lambda_function.send_email")
-    @patch("lambda_function.broken_binding_checks")
-    @patch("lambda_function.load_seen_items")
-    @patch("lambda_function.load_recipients")
-    def test_check_for_updates_no_changes_sends_nothing(
-        self,
-        mock_load_recipients,
-        mock_load_seen_items,
-        mock_broken_binding_checks,
-        mock_send_email,
-        mock_save_seen_items,
-    ):
-        mock_load_recipients.return_value = ["a@example.com", "b@example.com"]
+        # Verify junction rows link email_log to events
+        junction_rows = m["insert_email_log_events"].call_args[0][0]
+        self.assertEqual(len(junction_rows), 1)
+        self.assertEqual(junction_rows[0]["email_log_id"], 200)
+        self.assertEqual(junction_rows[0]["event_id"], 100)
 
+    def test_no_changes_sends_nothing(self):
+        m = self._patch_all()
+        m["get_recipients_for_run"].return_value = [self._recip("a@test.com")]
         items = [
-            {"name": "Same Book", "price": "$10", "store": "UK", "link": "https://same"},
+            {"name": "Same Book", "price": "$10", "store": "UK", "link": "https://same", "in_stock": True},
         ]
-
-        mock_load_seen_items.return_value = items
-        mock_broken_binding_checks.return_value = items
+        m["load_seen_items"].return_value = items
+        m["broken_binding_checks"].return_value = items
+        m["fetch_item_ids_by_link"].return_value = {}
 
         lf.check_for_updates()
 
-        mock_send_email.assert_not_called()
-        mock_save_seen_items.assert_not_called()
+        m["send_email"].assert_not_called()
+        m["save_seen_items"].assert_called_once()
 
-    # --- Updates: triggers email when price changes for existing item ---
-    @patch("lambda_function.save_seen_items")
-    @patch("lambda_function.send_email")
-    @patch("lambda_function.broken_binding_checks")
-    @patch("lambda_function.load_seen_items")
-    @patch("lambda_function.load_recipients")
-    def test_check_for_updates_sends_on_price_change(
-        self,
-        mock_load_recipients,
-        mock_load_seen_items,
-        mock_broken_binding_checks,
-        mock_send_email,
-        mock_save_seen_items,
-    ):
-        mock_load_recipients.return_value = ["a@example.com"]
-
-        seen_items = [
-            {"name": "Book A", "price": "$10", "store": "UK", "link": "https://a"},
+    def test_price_change_event(self):
+        m = self._patch_all()
+        m["get_recipients_for_run"].return_value = [self._recip("a@test.com")]
+        m["load_seen_items"].return_value = [
+            {"name": "Book A", "price": "$10", "store": "UK", "link": "https://a", "in_stock": True},
         ]
-        new_items = [
-            {"name": "Book A", "price": "$12", "store": "UK", "link": "https://a"},
+        m["broken_binding_checks"].return_value = [
+            {"name": "Book A", "price": "$12", "store": "UK", "link": "https://a", "in_stock": True},
         ]
-
-        mock_load_seen_items.return_value = seen_items
-        mock_broken_binding_checks.return_value = new_items
+        m["fetch_item_ids_by_link"].return_value = {"https://a": 1}
+        m["insert_events"].return_value = [{"id": 10, "item_id": 1, "event_type": "Price Change"}]
+        m["insert_email_log"].return_value = [{"id": 50, "user_id": "uid-a"}]
 
         lf.check_for_updates()
 
-        mock_send_email.assert_called_once()
-        mock_save_seen_items.assert_called_once_with(new_items)
+        event_rows = m["insert_events"].call_args[0][0]
+        self.assertEqual(event_rows[0]["event_type"], "Price Change")
+        self.assertEqual(event_rows[0]["old_value"], "$10")
+        self.assertEqual(event_rows[0]["new_value"], "$12")
 
-        sent_body = mock_send_email.call_args.args[1]
-        self.assertIn("Price Change - Previously", sent_body)
+        sent_body = m["send_email"].call_args[0][1]
+        self.assertIn("Price Change", sent_body)
+
+    def test_restock_event(self):
+        m = self._patch_all()
+        m["get_recipients_for_run"].return_value = [self._recip("a@test.com")]
+        m["load_seen_items"].return_value = [
+            {"name": "Book A", "price": "$10", "store": "UK", "link": "https://a", "in_stock": False},
+        ]
+        m["broken_binding_checks"].return_value = [
+            {"name": "Book A", "price": "$10", "store": "UK", "link": "https://a", "in_stock": True},
+        ]
+        m["fetch_item_ids_by_link"].return_value = {"https://a": 1}
+        m["insert_events"].return_value = [{"id": 10, "item_id": 1, "event_type": "Restocked"}]
+        m["insert_email_log"].return_value = [{"id": 50, "user_id": "uid-a"}]
+
+        lf.check_for_updates()
+
+        event_rows = m["insert_events"].call_args[0][0]
+        self.assertEqual(event_rows[0]["event_type"], "Restocked")
+        self.assertEqual(event_rows[0]["old_value"], "out_of_stock")
+        self.assertEqual(event_rows[0]["new_value"], "in_stock")
+
+    def test_out_of_stock_does_not_email(self):
+        m = self._patch_all()
+        m["get_recipients_for_run"].return_value = [self._recip("a@test.com")]
+        m["load_seen_items"].return_value = [
+            {"name": "Book A", "price": "$10", "store": "UK", "link": "https://a", "in_stock": True},
+        ]
+        m["broken_binding_checks"].return_value = [
+            {"name": "Book A", "price": "$10", "store": "UK", "link": "https://a", "in_stock": False},
+        ]
+        m["fetch_item_ids_by_link"].return_value = {"https://a": 1}
+        m["insert_events"].return_value = [{"id": 10, "item_id": 1, "event_type": "Out of Stock"}]
+
+        lf.check_for_updates()
+
+        event_rows = m["insert_events"].call_args[0][0]
+        self.assertEqual(event_rows[0]["event_type"], "Out of Stock")
+        m["send_email"].assert_not_called()
+
+    def test_empty_scraper_skips_all(self):
+        m = self._patch_all()
+        m["get_recipients_for_run"].return_value = [self._recip("a@test.com")]
+        m["load_seen_items"].return_value = [
+            {"name": "Book", "price": "$10", "store": "UK", "link": "https://x", "in_stock": True},
+        ]
+        m["broken_binding_checks"].return_value = []
+
+        lf.check_for_updates()
+
+        m["save_seen_items"].assert_not_called()
+        m["send_email"].assert_not_called()
+        m["insert_events"].assert_not_called()
+        m["insert_email_log"].assert_not_called()
+        m["insert_email_log_events"].assert_not_called()
+
+    def test_run_id_propagated_to_all_db_functions(self):
+        m = self._patch_all()
+        m["get_recipients_for_run"].return_value = [self._recip("a@test.com", "uid-a")]
+        m["load_seen_items"].return_value = []
+        m["broken_binding_checks"].return_value = [
+            {"name": "Book", "price": "$10", "store": "UK", "link": "https://x", "in_stock": True},
+        ]
+        m["fetch_item_ids_by_link"].return_value = {"https://x": 1}
+        m["insert_events"].return_value = [{"id": 10, "item_id": 1, "event_type": "New Item"}]
+        m["insert_email_log"].return_value = [{"id": 50, "user_id": "uid-a"}]
+
+        lf.check_for_updates()
+
+        run_id = m["get_recipients_for_run"].call_args[0][0]
+        self.assertTrue(len(run_id) == 36, "run_id should be a UUID string")
+        self.assertEqual(m["load_seen_items"].call_args[0][0], run_id)
+        self.assertEqual(m["save_seen_items"].call_args[0][1], run_id)
+        self.assertEqual(m["fetch_item_ids_by_link"].call_args[0][1], run_id)
+        self.assertEqual(m["insert_events"].call_args[0][1], run_id)
+        self.assertEqual(m["insert_email_log"].call_args[0][1], run_id)
+        self.assertEqual(m["insert_email_log_events"].call_args[0][1], run_id)
+
+    def test_typed_price_attached_before_upsert(self):
+        m = self._patch_all()
+        m["get_recipients_for_run"].return_value = []
+        m["load_seen_items"].return_value = []
+        m["broken_binding_checks"].return_value = [
+            {"name": "Book", "price": "$10.99", "store": "UK", "link": "https://x", "in_stock": True},
+        ]
+        m["fetch_item_ids_by_link"].return_value = {}
+
+        lf.check_for_updates()
+
+        saved_items = m["save_seen_items"].call_args[0][0]
+        self.assertEqual(saved_items[0]["typed_price"], 1099)
+
+    def test_email_failure_logged_with_error(self):
+        m = self._patch_all()
+        m["get_recipients_for_run"].return_value = [self._recip("a@test.com", "uid-a")]
+        m["load_seen_items"].return_value = []
+        m["broken_binding_checks"].return_value = [
+            {"name": "Book", "price": "$10", "store": "UK", "link": "https://x", "in_stock": True},
+        ]
+        m["fetch_item_ids_by_link"].return_value = {"https://x": 1}
+        m["insert_events"].return_value = [{"id": 10, "item_id": 1, "event_type": "New Item"}]
+        m["insert_email_log"].return_value = [{"id": 50, "user_id": "uid-a"}]
+        m["send_email"].side_effect = Exception("SMTP timeout")
+
+        lf.check_for_updates()
+
+        log_rows = m["insert_email_log"].call_args[0][0]
+        self.assertEqual(len(log_rows), 1)
+        self.assertFalse(log_rows[0]["success"])
+        self.assertEqual(log_rows[0]["error_message"], "SMTP timeout")
+
+    def test_multiple_recipients_produce_multiple_log_rows(self):
+        m = self._patch_all()
+        m["get_recipients_for_run"].return_value = [
+            self._recip("a@test.com", "uid-a"),
+            self._recip("b@test.com", "uid-b"),
+        ]
+        m["load_seen_items"].return_value = []
+        m["broken_binding_checks"].return_value = [
+            {"name": "Book", "price": "$10", "store": "UK", "link": "https://x", "in_stock": True},
+        ]
+        m["fetch_item_ids_by_link"].return_value = {"https://x": 1}
+        m["insert_events"].return_value = [{"id": 10, "item_id": 1, "event_type": "New Item"}]
+        m["insert_email_log"].return_value = [
+            {"id": 50, "user_id": "uid-a"},
+            {"id": 51, "user_id": "uid-b"},
+        ]
+
+        lf.check_for_updates()
+
+        self.assertEqual(m["send_email"].call_count, 2)
+
+        log_rows = m["insert_email_log"].call_args[0][0]
+        self.assertEqual(len(log_rows), 2)
+        self.assertEqual(log_rows[0]["user_id"], "uid-a")
+        self.assertEqual(log_rows[1]["user_id"], "uid-b")
+
+        # Junction rows: 2 email_log rows x 1 event = 2 junction rows
+        junction_rows = m["insert_email_log_events"].call_args[0][0]
+        self.assertEqual(len(junction_rows), 2)
+        self.assertEqual({r["email_log_id"] for r in junction_rows}, {50, 51})
+        self.assertTrue(all(r["event_id"] == 10 for r in junction_rows))
 
 
 if __name__ == "__main__":

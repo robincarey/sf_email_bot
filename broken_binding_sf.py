@@ -1,11 +1,28 @@
 import requests
 import time
 import random
+import logging
 from bs4 import BeautifulSoup
+
+logger = logging.getLogger(__name__)
+
+
+def _get_with_retry(session, url, max_retries=3, timeout=10):
+    """GET with exponential backoff. Raises on final failure."""
+    for attempt in range(max_retries):
+        try:
+            resp = session.get(url, timeout=timeout)
+            resp.raise_for_status()
+            return resp
+        except requests.RequestException:
+            if attempt == max_retries - 1:
+                raise
+            wait = 2 ** attempt + random.uniform(0, 1)
+            logger.warning(f"Retry {attempt + 1}/{max_retries} for {url} (waiting {wait:.1f}s)")
+            time.sleep(wait)
 
 
 def broken_binding_checks():
-    # Checking Broken Binding product pages
     urls = [
         {"url": "https://thebrokenbindingsub.com/collections/to-the-stars", "store": "To The Stars"},
         {"url": "https://thebrokenbindingsub.com/collections/the-infirmary", "store": "The Infirmary"},
@@ -13,7 +30,6 @@ def broken_binding_checks():
     ]
     product_list = []
 
-    # Fire up a session with appropriate headers
     with requests.Session() as session:
         session.headers.update({
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -22,44 +38,38 @@ def broken_binding_checks():
             "Connection": "keep-alive",
             "Referer": "https://thebrokenbindingsub.com/"
         })
+        # Warm up the session; best-effort, failures are non-fatal
         try:
-            session.get("https://thebrokenbindingsub.com/", timeout=10)
+            _get_with_retry(session, "https://thebrokenbindingsub.com/")
             time.sleep(random.uniform(0.2, 0.5))
         except requests.RequestException:
-            pass  # continue anyway
+            pass
 
         for entry in urls:
             url = entry['url']
             store = entry['store']
 
-            # Make the HTTP request with headers
             try:
-                response = session.get(url, timeout=10)
-                response.raise_for_status()  # catches 4xx/5xx
-            except requests.exceptions.RequestException as e:
-                print(f"Error fetching collection {url}: {e}")
+                response = _get_with_retry(session, url)
+            except requests.RequestException as e:
+                logger.error(f"Error fetching collection {url}: {e}")
                 continue
             soup = BeautifulSoup(response.content, "html.parser")
 
-            # Small delay after collection fetch
             time.sleep(random.uniform(0.2, 0.5))
 
-            # Find all list items with the grid product class
             product_items = soup.find_all("li", class_="grid__item")
 
             for product in product_items:
-                # Extract the product name inside an <h3> with a nested <a>
                 heading = product.find("h3", class_="card__heading")
                 if heading:
                     link = heading.find("a", class_="full-unstyled-link")
                     product_name = link.get_text(strip=True) if link else "No name found"
                     link = "https://thebrokenbindingsub.com" + link['href']
-                    # Check whether product is in stock
                     try:
-                        product_response = session.get(link, timeout=10)
-                        product_response.raise_for_status() # catches 4xx/5xx
-                    except requests.exceptions.RequestException as e:
-                        print(f"Error fetching product {link}: {e}")
+                        product_response = _get_with_retry(session, link)
+                    except requests.RequestException as e:
+                        logger.error(f"Error fetching product {link}: {e}")
                         continue
                     product_soup = BeautifulSoup(product_response.content, "html.parser")
                     cart_button = product_soup.find("button", class_="product-form__submit")
@@ -70,14 +80,12 @@ def broken_binding_checks():
                 else:
                     product_name = "No name found"
 
-                # Extract the product price: prefer sale price, fall back to regular
                 price_span = (
-                    product.find("span", class_="price-item--sale") or 
+                    product.find("span", class_="price-item--sale") or
                     product.find("span", class_="price-item--regular")
                 )
                 product_price = price_span.get_text(strip=True) if price_span else "No price found"
 
-                # Add extracted info to product_list
                 product_list.append({
                     'name': product_name,
                     'price': product_price,
@@ -85,11 +93,11 @@ def broken_binding_checks():
                     'link': link,
                     'in_stock': in_stock
                 })
-                
-                # Small delay between scraping products to limit hit to server
+
                 time.sleep(random.uniform(0.2, 0.6))
 
     return product_list
+
 
 if __name__ == "__main__":
     test_array = broken_binding_checks()
@@ -97,4 +105,3 @@ if __name__ == "__main__":
         for key, value in entry.items():
             print(f"{key}: {value}", end=" | ")
         print()
-    
