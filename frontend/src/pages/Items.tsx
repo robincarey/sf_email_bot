@@ -268,11 +268,11 @@ export default function Items() {
                       <td className="py-2.5 px-3 text-text-muted">{item.price || '\u2014'}</td>
                       <td className="py-2.5 px-3">
                         {item.in_stock ? (
-                          <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
+                          <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
                             In Stock
                           </span>
                         ) : (
-                          <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300">
+                          <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300">
                             Out of Stock
                           </span>
                         )}
