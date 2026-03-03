@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 interface ItemInfo {
   name: string
   link: string
+  store: string | null
 }
 
 interface AlertEvent {
@@ -34,7 +35,7 @@ export default function RecentAlerts() {
     async function fetchEvents() {
       const { data, error } = await supabase
         .from('item_events')
-        .select('id, event_type, store, event_time, in_stock, old_value, new_value, items_seen!inner(name, link)')
+        .select('id, event_type, store, event_time, in_stock, old_value, new_value, items_seen!inner(name, link, store)')
         .order('event_time', { ascending: false })
         .limit(20)
 
@@ -111,7 +112,7 @@ export default function RecentAlerts() {
                   {evt.event_type}
                 </span>
               </td>
-              <td className="py-3 pr-4 text-text-muted">{evt.store}</td>
+              <td className="py-3 pr-4 text-text-muted">{evt.store || item?.store || '\u2014'}</td>
               <td className="py-3 text-text-muted whitespace-nowrap">
                 {formatRelativeTime(evt.event_time)}
               </td>
