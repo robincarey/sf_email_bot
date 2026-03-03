@@ -46,7 +46,7 @@ export default function Login() {
       <div className="w-full max-w-sm">
         <div className="rounded-xl bg-surface border border-border shadow-sm p-8">
           <div className="flex items-center justify-center gap-2 mb-1">
-            <img src="/logo.png" alt="" className="h-8 w-8" />
+            <img src="/logo.png" alt="" className="h-8 w-auto" />
             <h1 className="text-xl font-semibold text-text">
               SFF Stock Alerts
             </h1>
