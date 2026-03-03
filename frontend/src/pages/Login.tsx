@@ -45,8 +45,8 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center bg-surface-alt px-4">
       <div className="w-full max-w-sm">
         <div className="rounded-xl bg-surface border border-border shadow-sm p-8">
-          <div className="flex flex-col items-start gap-2.5 mb-1">
-            <img src="/logo.png" alt="" className="h-30 w-auto" />
+          <div className="flex flex-col items-center gap-2.5 mb-1">
+            <img src="/logo.png" alt="" className="h-32 w-auto" />
             <h1 className="text-xl font-semibold text-text">
               SFF Stock Alerts
             </h1>
