@@ -1,0 +1,98 @@
+import { useState } from 'react'
+import { Navigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../context/AuthContext'
+
+export default function Login() {
+  const { user, loading } = useAuth()
+  const [email, setEmail] = useState('')
+  const [sent, setSent] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin h-8 w-8 rounded-full border-4 border-brand border-t-transparent" />
+      </div>
+    )
+  }
+
+  if (user) {
+    return <Navigate to="/" replace />
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setSubmitting(true)
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.origin },
+    })
+
+    setSubmitting(false)
+
+    if (error) {
+      setError(error.message)
+    } else {
+      setSent(true)
+    }
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-surface-alt px-4">
+      <div className="w-full max-w-sm">
+        <div className="rounded-xl bg-surface border border-border shadow-sm p-8">
+          <h1 className="text-xl font-semibold text-text text-center mb-1">
+            Broken Binding Alerts
+          </h1>
+          <p className="text-sm text-text-muted text-center mb-8">
+            Sign in to manage your alert preferences
+          </p>
+
+          {sent ? (
+            <div className="rounded-lg bg-green-50 border border-green-200 p-4 text-center">
+              <p className="text-sm font-medium text-green-800">
+                Check your email
+              </p>
+              <p className="text-sm text-green-700 mt-1">
+                We sent a magic link to <strong>{email}</strong>
+              </p>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-text mb-1">
+                  Email address
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="block w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-text-muted focus:outline-2 focus:outline-brand"
+                />
+              </div>
+
+              {error && (
+                <p className="text-sm text-red-600">{error}</p>
+              )}
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {submitting ? 'Sending...' : 'Send magic link'}
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

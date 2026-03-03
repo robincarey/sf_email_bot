@@ -1,0 +1,17 @@
+# Virtual environment config
+venv/
+.direnv/
+.envrc
+items_seen.json
+.idea/
+packages/
+my_deployment_package.zip
+.DS_Store
+**/__pycache__/
+local/
+supabase/*
+!supabase/migrations
+
+# Frontend
+frontend/.env
+.env

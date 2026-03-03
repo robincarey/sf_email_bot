@@ -1,0 +1,138 @@
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase'
+
+interface ItemInfo {
+  name: string
+  link: string
+}
+
+interface AlertEvent {
+  id: number
+  event_type: string
+  store: string
+  created_at: string
+  in_stock: boolean
+  old_value: string | null
+  new_value: string | null
+  items_seen: ItemInfo | ItemInfo[] | null
+}
+
+const eventBadgeColors: Record<string, string> = {
+  'New Item': 'bg-green-100 text-green-800',
+  'Restocked': 'bg-blue-100 text-blue-800',
+  'Price Change': 'bg-amber-100 text-amber-800',
+  'Store Change': 'bg-purple-100 text-purple-800',
+  'Out of Stock': 'bg-red-100 text-red-800',
+  'New Item - Out of Stock': 'bg-gray-100 text-gray-800',
+}
+
+export default function RecentAlerts() {
+  const [events, setEvents] = useState<AlertEvent[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchEvents() {
+      const { data, error } = await supabase
+        .from('item_events')
+        .select('id, event_type, store, created_at, in_stock, old_value, new_value, items_seen(name, link)')
+        .order('created_at', { ascending: false })
+        .limit(20)
+
+      if (error) {
+        console.error('Error fetching events:', error)
+      } else {
+        const normalized = (data ?? []).map((row) => {
+          const item = Array.isArray(row.items_seen)
+            ? row.items_seen[0] ?? null
+            : row.items_seen
+          return { ...row, items_seen: item } as AlertEvent
+        })
+        setEvents(normalized)
+      }
+      setLoading(false)
+    }
+    fetchEvents()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="animate-pulse space-y-3">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="h-12 bg-gray-100 rounded" />
+        ))}
+      </div>
+    )
+  }
+
+  if (events.length === 0) {
+    return (
+      <p className="text-sm text-text-muted py-6 text-center">
+        No recent alerts yet. Events will appear here when items change.
+      </p>
+    )
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border text-left text-text-muted">
+            <th className="pb-2 pr-4 font-medium">Item</th>
+            <th className="pb-2 pr-4 font-medium">Event</th>
+            <th className="pb-2 pr-4 font-medium">Store</th>
+            <th className="pb-2 font-medium">When</th>
+          </tr>
+        </thead>
+        <tbody>
+          {events.map((evt) => {
+            const item = Array.isArray(evt.items_seen) ? evt.items_seen[0] : evt.items_seen
+            return (
+            <tr key={evt.id} className="border-b border-border last:border-0">
+              <td className="py-3 pr-4">
+                {item ? (
+                  <a
+                    href={item.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-brand hover:text-brand-dark font-medium hover:underline"
+                  >
+                    {item.name}
+                  </a>
+                ) : (
+                  <span className="text-text-muted italic">Unknown item</span>
+                )}
+              </td>
+              <td className="py-3 pr-4">
+                <span
+                  className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                    eventBadgeColors[evt.event_type] ?? 'bg-gray-100 text-gray-800'
+                  }`}
+                >
+                  {evt.event_type}
+                </span>
+              </td>
+              <td className="py-3 pr-4 text-text-muted">{evt.store}</td>
+              <td className="py-3 text-text-muted whitespace-nowrap">
+                {formatRelativeTime(evt.created_at)}
+              </td>
+            </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function formatRelativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const minutes = Math.floor(diff / 60_000)
+  if (minutes < 1) return 'Just now'
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days === 1) return 'Yesterday'
+  if (days < 7) return `${days}d ago`
+  return new Date(iso).toLocaleDateString()
+}
