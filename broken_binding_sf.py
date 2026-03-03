@@ -24,9 +24,9 @@ def _get_with_retry(session, url, max_retries=3, timeout=10):
 
 def broken_binding_checks():
     urls = [
-        {"url": "https://thebrokenbindingsub.com/collections/to-the-stars", "store": "To The Stars"},
-        {"url": "https://thebrokenbindingsub.com/collections/the-infirmary", "store": "The Infirmary"},
-        {"url": "https://thebrokenbindingsub.com/collections/dragons-hoard", "store": "Dragon's Hoard"}
+        {"url": "https://thebrokenbindingsub.com/collections/to-the-stars", "store": "Broken Binding - To The Stars"},
+        {"url": "https://thebrokenbindingsub.com/collections/the-infirmary", "store": "Broken Binding - The Infirmary"},
+        {"url": "https://thebrokenbindingsub.com/collections/dragons-hoard", "store": "Broken Binding - Dragon's Hoard"}
     ]
     product_list = []
 

@@ -45,19 +45,22 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center bg-surface-alt px-4">
       <div className="w-full max-w-sm">
         <div className="rounded-xl bg-surface border border-border shadow-sm p-8">
-          <h1 className="text-xl font-semibold text-text text-center mb-1">
-            Broken Binding Alerts
-          </h1>
+          <div className="flex items-center justify-center gap-2 mb-1">
+            <img src="/logo.png" alt="" className="h-8 w-8" />
+            <h1 className="text-xl font-semibold text-text">
+              SFF Stock Alerts
+            </h1>
+          </div>
           <p className="text-sm text-text-muted text-center mb-8">
             Sign in to manage your alert preferences
           </p>
 
           {sent ? (
-            <div className="rounded-lg bg-green-50 border border-green-200 p-4 text-center">
-              <p className="text-sm font-medium text-green-800">
+            <div className="rounded-lg bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 p-4 text-center">
+              <p className="text-sm font-medium text-green-800 dark:text-green-300">
                 Check your email
               </p>
-              <p className="text-sm text-green-700 mt-1">
+              <p className="text-sm text-green-700 dark:text-green-400 mt-1">
                 We sent a magic link to <strong>{email}</strong>
               </p>
             </div>

@@ -15,7 +15,7 @@ export default function StoreToggle({ storeName, enabled, onToggle, disabled }: 
         disabled={disabled}
         onClick={() => onToggle(!enabled)}
         className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-50 disabled:cursor-not-allowed ${
-          enabled ? 'bg-brand' : 'bg-gray-200'
+          enabled ? 'bg-brand' : 'bg-gray-200 dark:bg-gray-600'
         }`}
       >
         <span

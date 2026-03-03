@@ -10,7 +10,7 @@ interface AlertEvent {
   id: number
   event_type: string
   store: string
-  created_at: string
+  event_time: string
   in_stock: boolean
   old_value: string | null
   new_value: string | null
@@ -18,12 +18,12 @@ interface AlertEvent {
 }
 
 const eventBadgeColors: Record<string, string> = {
-  'New Item': 'bg-green-100 text-green-800',
-  'Restocked': 'bg-blue-100 text-blue-800',
-  'Price Change': 'bg-amber-100 text-amber-800',
-  'Store Change': 'bg-purple-100 text-purple-800',
-  'Out of Stock': 'bg-red-100 text-red-800',
-  'New Item - Out of Stock': 'bg-gray-100 text-gray-800',
+  'New Item': 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+  'Restocked': 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+  'Price Change': 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+  'Store Change': 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
+  'Out of Stock': 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+  'New Item - Out of Stock': 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
 }
 
 export default function RecentAlerts() {
@@ -34,8 +34,8 @@ export default function RecentAlerts() {
     async function fetchEvents() {
       const { data, error } = await supabase
         .from('item_events')
-        .select('id, event_type, store, created_at, in_stock, old_value, new_value, items_seen(name, link)')
-        .order('created_at', { ascending: false })
+        .select('id, event_type, store, event_time, in_stock, old_value, new_value, items_seen!inner(name, link)')
+        .order('event_time', { ascending: false })
         .limit(20)
 
       if (error) {
@@ -58,7 +58,7 @@ export default function RecentAlerts() {
     return (
       <div className="animate-pulse space-y-3">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="h-12 bg-gray-100 rounded" />
+          <div key={i} className="h-12 bg-gray-100 dark:bg-gray-800 rounded" />
         ))}
       </div>
     )
@@ -113,7 +113,7 @@ export default function RecentAlerts() {
               </td>
               <td className="py-3 pr-4 text-text-muted">{evt.store}</td>
               <td className="py-3 text-text-muted whitespace-nowrap">
-                {formatRelativeTime(evt.created_at)}
+                {formatRelativeTime(evt.event_time)}
               </td>
             </tr>
             )

@@ -49,13 +49,13 @@ ALTER TABLE item_events ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Authenticated users can view events"
     ON item_events FOR SELECT
-    USING (auth.role() = 'authenticated');
+    USING (auth.uid() IS NOT NULL);
 
 ALTER TABLE items_seen ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Authenticated users can view items"
     ON items_seen FOR SELECT
-    USING (auth.role() = 'authenticated');
+    USING (auth.uid() IS NOT NULL);
 
 -- 4. Trigger: auto-create a profile row when a new auth user signs up
 --    SET search_path = public is required because the auth system fires
@@ -80,9 +80,9 @@ CREATE OR REPLACE FUNCTION public.handle_new_profile()
 RETURNS TRIGGER AS $$
 BEGIN
     INSERT INTO public.user_store_preferences (user_id, store_name) VALUES
-        (NEW.id, 'To The Stars'),
-        (NEW.id, 'Dragon''s Hoard'),
-        (NEW.id, 'The Infirmary');
+        (NEW.id, 'Broken Binding - To The Stars'),
+        (NEW.id, 'Broken Binding - Dragon''s Hoard'),
+        (NEW.id, 'Broken Binding - The Infirmary');
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER

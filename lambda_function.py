@@ -388,7 +388,7 @@ def check_for_updates():
     user_ids = [r["id"] for r in recipients if r["id"]]
     store_prefs = get_store_preferences_for_users(user_ids, run_id)
 
-    email_subject = "New Broken Binding Books Available!"
+    email_subject = "SFF Stock Alert - New Books Available!"
 
     email_results = []
     all_emailed_event_ids = set()
