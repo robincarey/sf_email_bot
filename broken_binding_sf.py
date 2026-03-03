@@ -46,55 +46,63 @@ def broken_binding_checks():
             pass
 
         for entry in urls:
-            url = entry['url']
+            base_url = entry['url']
             store = entry['store']
+            page = 1
 
-            try:
-                response = _get_with_retry(session, url)
-            except requests.RequestException as e:
-                logger.error(f"Error fetching collection {url}: {e}")
-                continue
-            soup = BeautifulSoup(response.content, "html.parser")
+            while True:
+                paginated_url = f"{base_url}?page={page}"
+                try:
+                    response = _get_with_retry(session, paginated_url)
+                except requests.RequestException as e:
+                    logger.error(f"Error fetching collection {paginated_url}: {e}")
+                    break
+                soup = BeautifulSoup(response.content, "html.parser")
 
-            time.sleep(random.uniform(0.2, 0.5))
+                time.sleep(random.uniform(0.2, 0.5))
 
-            product_items = soup.find_all("li", class_="grid__item")
+                product_items = soup.find_all("li", class_="grid__item")
+                if not product_items:
+                    break
 
-            for product in product_items:
-                heading = product.find("h3", class_="card__heading")
-                if heading:
-                    link = heading.find("a", class_="full-unstyled-link")
-                    product_name = link.get_text(strip=True) if link else "No name found"
-                    link = "https://thebrokenbindingsub.com" + link['href']
-                    try:
-                        product_response = _get_with_retry(session, link)
-                    except requests.RequestException as e:
-                        logger.error(f"Error fetching product {link}: {e}")
-                        continue
-                    product_soup = BeautifulSoup(product_response.content, "html.parser")
-                    cart_button = product_soup.find("button", class_="product-form__submit")
-                    if not cart_button or "Sold out" in cart_button.get_text(strip=True):
-                        in_stock = False
+                for product in product_items:
+                    heading = product.find("h3", class_="card__heading")
+                    if heading:
+                        link = heading.find("a", class_="full-unstyled-link")
+                        product_name = link.get_text(strip=True) if link else "No name found"
+                        link = "https://thebrokenbindingsub.com" + link['href']
+                        try:
+                            product_response = _get_with_retry(session, link)
+                        except requests.RequestException as e:
+                            logger.error(f"Error fetching product {link}: {e}")
+                            continue
+                        product_soup = BeautifulSoup(product_response.content, "html.parser")
+                        cart_button = product_soup.find("button", class_="product-form__submit")
+                        if not cart_button or "Sold out" in cart_button.get_text(strip=True):
+                            in_stock = False
+                        else:
+                            in_stock = True
                     else:
-                        in_stock = True
-                else:
-                    product_name = "No name found"
+                        product_name = "No name found"
 
-                price_span = (
-                    product.find("span", class_="price-item--sale") or
-                    product.find("span", class_="price-item--regular")
-                )
-                product_price = price_span.get_text(strip=True) if price_span else "No price found"
+                    price_span = (
+                        product.find("span", class_="price-item--sale") or
+                        product.find("span", class_="price-item--regular")
+                    )
+                    product_price = price_span.get_text(strip=True) if price_span else "No price found"
 
-                product_list.append({
-                    'name': product_name,
-                    'price': product_price,
-                    'store': store,
-                    'link': link,
-                    'in_stock': in_stock
-                })
+                    product_list.append({
+                        'name': product_name,
+                        'price': product_price,
+                        'store': store,
+                        'link': link,
+                        'in_stock': in_stock
+                    })
 
-                time.sleep(random.uniform(0.2, 0.6))
+                    time.sleep(random.uniform(0.2, 0.6))
+
+                logger.info(f"Scraped {store} page {page}: {len(product_items)} products")
+                page += 1
 
     return product_list
 
