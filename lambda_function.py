@@ -227,9 +227,9 @@ def check_for_updates():
 
     logger.info(f"[{run_id}] Found {len(unseen_items)} changed items, {len(events)} events.")
 
-    # Attach typed_price before upserting
+    # Attach typed_price_cents before upserting
     for item in new_items:
-        item["typed_price"] = parse_price_cents(item.get("price"))
+        item["typed_price_cents"] = parse_price_cents(item.get("price"))
 
     # Step 1: Upsert items_seen so IDs exist for new items
     save_seen_items(new_items, run_id)
