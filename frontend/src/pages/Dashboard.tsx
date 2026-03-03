@@ -13,7 +13,15 @@ interface WatchlistItem {
     store: string | null
     price: string | null
     in_stock: boolean
+    last_in_stock: string | null
   }
+}
+
+const EXPIRY_MS = 30 * 24 * 60 * 60 * 1000
+
+function isExpired(lastInStock: string | null): boolean {
+  if (!lastInStock) return true
+  return Date.now() - new Date(lastInStock).getTime() > EXPIRY_MS
 }
 
 export default function Dashboard() {
@@ -42,7 +50,7 @@ export default function Dashboard() {
     if (!user) return
     const { data, error } = await supabase
       .from('watchlist')
-      .select('id, item_id, items_seen!inner(name, link, store, price, in_stock)')
+      .select('id, item_id, items_seen!inner(name, link, store, price, in_stock, last_in_stock)')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
@@ -143,8 +151,9 @@ export default function Dashboard() {
               <tbody>
                 {watchlist.map((w) => {
                   const item = w.items_seen
+                  const expired = isExpired(item.last_in_stock)
                   return (
-                    <tr key={w.id} className="border-b border-border last:border-0">
+                    <tr key={w.id} className={`border-b border-border last:border-0 ${expired ? 'opacity-50' : ''}`}>
                       <td className="py-3 pr-4">
                         <a
                           href={item.link}
@@ -158,7 +167,11 @@ export default function Dashboard() {
                       <td className="py-3 pr-4 text-text-muted">{item.store || '\u2014'}</td>
                       <td className="py-3 pr-4 text-text-muted">{item.price || '\u2014'}</td>
                       <td className="py-3 pr-4">
-                        {item.in_stock ? (
+                        {expired ? (
+                          <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+                            Unavailable
+                          </span>
+                        ) : item.in_stock ? (
                           <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
                             In Stock
                           </span>

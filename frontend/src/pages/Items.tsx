@@ -9,6 +9,7 @@ interface Item {
   store: string | null
   link: string
   in_stock: boolean
+  last_in_stock: string | null
 }
 
 type StockFilter = 'all' | 'in_stock'
@@ -43,9 +44,11 @@ export default function Items() {
 
   useEffect(() => {
     async function fetchItems() {
+      const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
       const { data, error } = await supabase
         .from('items_seen')
-        .select('id, name, price, store, link, in_stock')
+        .select('id, name, price, store, link, in_stock, last_in_stock')
+        .or(`last_in_stock.gte.${cutoff},in_stock.eq.true`)
         .order('name', { ascending: true })
 
       if (error) {
