@@ -26,9 +26,12 @@ def broken_binding_checks():
     urls = [
         {"url": "https://thebrokenbindingsub.com/collections/to-the-stars", "store": "Broken Binding - To The Stars"},
         {"url": "https://thebrokenbindingsub.com/collections/the-infirmary", "store": "Broken Binding - The Infirmary"},
-        {"url": "https://thebrokenbindingsub.com/collections/dragons-hoard", "store": "Broken Binding - Dragon's Hoard"}
+        {"url": "https://thebrokenbindingsub.com/collections/dragons-hoard", "store": "Broken Binding - Dragon's Hoard"},
+        {"url": "https://thebrokenbindingsub.com/collections/the-graveyard", "store": "Broken Binding - The Graveyard"},
     ]
-    product_list = []
+    # Dedupe by canonical product link. This avoids duplicate constrained-key rows
+    # inside a single upsert call to Supabase (e.g. `upsert(... on_conflict="link")`).
+    products_by_link = {}
 
     with requests.Session() as session:
         session.headers.update({
@@ -66,11 +69,18 @@ def broken_binding_checks():
                     break
 
                 for product in product_items:
+                    # Ensure these variables always exist even if the page structure changes.
+                    in_stock = False
+                    link = None
                     heading = product.find("h3", class_="card__heading")
                     if heading:
-                        link = heading.find("a", class_="full-unstyled-link")
-                        product_name = link.get_text(strip=True) if link else "No name found"
-                        link = "https://thebrokenbindingsub.com" + link['href']
+                        link_tag = heading.find("a", class_="full-unstyled-link")
+                        product_name = link_tag.get_text(strip=True) if link_tag else "No name found"
+                        href = link_tag.get('href') if link_tag else None
+                        if not href:
+                            continue
+
+                        link = "https://thebrokenbindingsub.com" + href
                         try:
                             product_response = _get_with_retry(session, link)
                         except requests.RequestException as e:
@@ -91,20 +101,44 @@ def broken_binding_checks():
                     )
                     product_price = price_span.get_text(strip=True) if price_span else "No price found"
 
-                    product_list.append({
-                        'name': product_name,
-                        'price': product_price,
-                        'store': store,
-                        'link': link,
-                        'in_stock': in_stock
-                    })
+                    if not link:
+                        continue
+
+                    existing = products_by_link.get(link)
+                    if existing:
+                        # If any scrape instance shows the item is in stock, keep that.
+                        if not existing.get('in_stock') and in_stock:
+                            existing['in_stock'] = in_stock
+
+                        # Prefer a real price over "No price found".
+                        if (
+                            existing.get('price') == 'No price found' and
+                            product_price != 'No price found'
+                        ):
+                            existing['price'] = product_price
+
+                        # Keep the most informative fields we have.
+                        if existing.get('name') == 'No name found' and product_name != 'No name found':
+                            existing['name'] = product_name
+
+                        # Store naming can differ if a product appears in multiple collections.
+                        # Using the latest seen store keeps the catalog updated.
+                        existing['store'] = store
+                    else:
+                        products_by_link[link] = {
+                            'name': product_name,
+                            'price': product_price,
+                            'store': store,
+                            'link': link,
+                            'in_stock': in_stock
+                        }
 
                     time.sleep(random.uniform(0.2, 0.6))
 
                 logger.info(f"Scraped {store} page {page}: {len(product_items)} products")
                 page += 1
 
-    return product_list
+    return list(products_by_link.values())
 
 
 if __name__ == "__main__":

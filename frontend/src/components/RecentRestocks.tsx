@@ -16,6 +16,62 @@ type RestockEvent = {
   items_seen: ItemInfo | ItemInfo[] | null
 }
 
+const DEDUPE_WINDOW_MS = 6 * 60 * 60 * 1000 // 6 hours
+
+function dedupeEventsByItemWithinWindow(
+  rows: Array<
+    Omit<RestockEvent, 'items_seen'> & {
+      item: ItemInfo | null
+    }
+  >,
+) {
+  const kept: Array<
+    Omit<RestockEvent, 'items_seen'> & {
+      item: ItemInfo | null
+    }
+  > = []
+
+  // We keep the latest event for each item within the dedupe window,
+  // which prevents rapid successive restocks from looking like duplicates.
+  const lastKeptAtByKey = new Map<string, number>()
+
+  for (const evt of rows) {
+    const key = evt.item?.link ?? evt.item?.name ?? 'unknown'
+    const t = new Date(evt.event_time).getTime()
+
+    if (!Number.isFinite(t)) {
+      kept.push(evt)
+      continue
+    }
+
+    const lastKeptAt = lastKeptAtByKey.get(key)
+    if (
+      lastKeptAt !== undefined &&
+      lastKeptAt >= t &&
+      lastKeptAt - t <= DEDUPE_WINDOW_MS
+    ) {
+      continue
+    }
+
+    kept.push(evt)
+    lastKeptAtByKey.set(key, t)
+  }
+
+  return kept
+}
+
+function formatStoreLine(store: string | null) {
+  if (!store) return '—'
+
+  // Broken Binding stores are formatted like "Broken Binding - To The Stars".
+  const parts = store.split(' - ')
+  if (parts.length >= 2) {
+    return `${parts[0]} · ${parts.slice(1).join(' - ')}`
+  }
+
+  return store
+}
+
 export default function RecentRestocks() {
   const [events, setEvents] = useState<
     Array<
@@ -53,7 +109,7 @@ export default function RecentRestocks() {
         return { id: row.id, event_type: row.event_type, event_time: row.event_time, item }
       })
 
-      setEvents(normalized)
+      setEvents(dedupeEventsByItemWithinWindow(normalized))
       setLoading(false)
     }
 
@@ -86,20 +142,30 @@ export default function RecentRestocks() {
     <div className="space-y-3">
       {events.map((evt) => {
         const badgeClass = eventBadgeColors[evt.event_type] ?? 'bg-gray-100 text-gray-800'
+        const storeLine = formatStoreLine(evt.item?.store ?? null)
         return (
           <a
             key={evt.id}
             href={evt.item?.link ?? '#'}
             target="_blank"
             rel="noopener noreferrer"
-            className="block rounded-xl bg-surface border border-border shadow-sm p-4 hover:bg-surface-alt transition-colors"
+            className="group block rounded-xl bg-surface border border-border shadow-sm p-4 hover:bg-surface-alt transition-colors hover:shadow-md"
           >
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <div className="font-medium text-text truncate">
+                  <div className="min-w-0 font-medium text-text truncate transition-colors group-hover:text-brand-dark">
                     {evt.item?.name ?? 'Unknown item'}
                   </div>
+                  {evt.item?.link ? (
+                    <span
+                      aria-hidden
+                      className="text-brand/80 group-hover:text-brand-dark transition-colors"
+                      title="Opens in new tab"
+                    >
+                      ↗
+                    </span>
+                  ) : null}
                   <span
                     className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${badgeClass}`}
                   >
@@ -107,14 +173,10 @@ export default function RecentRestocks() {
                   </span>
                 </div>
                 <div className="mt-2 text-sm text-text-muted">
-                  <div className="truncate">
-                    <span className="font-medium text-text-muted">Store: </span>
-                    {evt.item?.store ?? '\u2014'}
-                  </div>
-                  <div className="truncate">
-                    <span className="font-medium text-text-muted">Price: </span>
+                  <span className="truncate">
+                    {storeLine} <span aria-hidden>&middot;</span>{' '}
                     {evt.item?.price ?? '\u2014'}
-                  </div>
+                  </span>
                 </div>
               </div>
               <div className="text-xs text-text-muted whitespace-nowrap">

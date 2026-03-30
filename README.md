@@ -4,7 +4,7 @@ Automated email notifications for new and restocked special-edition books from *
 
 ## Overview
 
-This bot monitors storefronts: The Broken Binding’s three collections (To the Stars, Dragon’s Hoard, and The Infirmary) and The Folio Society’s USA Sci-Fi & Fantasy category. It detects changes — new listings, restocks, price changes, stock-outs — and sends email alerts to subscribed users. All item and event data is persisted in Supabase for history tracking and future analytics.
+This bot monitors storefronts: The Broken Binding’s four collections (To the Stars, Dragon’s Hoard, The Infirmary, and The Graveyard) and The Folio Society’s USA Sci-Fi & Fantasy category. It detects changes — new listings, restocks, price changes, stock-outs — and sends email alerts to subscribed users. All item and event data is persisted in Supabase for history tracking and future analytics.
 
 Emails are sent with **Amazon SES** (via `boto3`); the Lambda execution role needs permission to send from your verified domain or address in SES.
 
