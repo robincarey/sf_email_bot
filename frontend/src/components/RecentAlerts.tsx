@@ -174,6 +174,13 @@ export default function RecentAlerts({ onWatchlistChange }: RecentAlertsProps) {
                 >
                   {evt.event_type}
                 </span>
+                {evt.event_type === 'Price Change' && evt.old_value && evt.new_value && (
+                  <span className="block text-xs text-text-muted mt-0.5">
+                    <span className="line-through">{evt.old_value}</span>
+                    {' \u2192 '}
+                    <span className="font-medium text-amber-700 dark:text-amber-400">{evt.new_value}</span>
+                  </span>
+                )}
               </td>
               <td className="py-3 pr-4 text-text-muted">{evt.store || item?.store || '\u2014'}</td>
               <td className="py-3 text-text-muted whitespace-nowrap">

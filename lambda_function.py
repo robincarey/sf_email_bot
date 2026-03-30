@@ -261,10 +261,18 @@ def insert_daily_snapshots(items, link_to_id, run_id):
 
 def _build_email_table(items):
     """Build the HTML table for the email body."""
+    def _price_cell(item):
+        if item.get("event_type") == "Price Change" and item.get("old_value"):
+            return (
+                f"<s style='color:#999;'>{item['old_value']}</s>"
+                f" &rarr; <strong>{item['new_value']}</strong>"
+            )
+        return item["price"]
+
     rows = ''.join(
         f"<tr style='border-bottom: 1px solid #ddd;'>"
         f"<td style='padding: 8px;'><a href='{item['link']}'>{item['name']}</a></td>"
-        f"<td style='padding: 8px;'>{item['price']}</td>"
+        f"<td style='padding: 8px;'>{_price_cell(item)}</td>"
         f"<td style='padding: 8px;'>{item['store']}</td>"
         f"<td style='padding: 8px;'>{item['event_type']}</td>"
         f"</tr>"
@@ -367,6 +375,8 @@ def check_for_updates(store_filter=None):
             new_value = None
 
         book["event_type"] = event_type
+        book["old_value"] = old_value
+        book["new_value"] = new_value
 
         # Intermediate structure; link is used to resolve item_id, not stored in DB
         events.append({
