@@ -99,6 +99,11 @@ export default function Login() {
 
           <p className="mt-6 text-center text-xs text-text-muted">
             By continuing, you agree to our{' '}
+            <Link to="/terms" className="underline hover:text-text transition-colors">
+              Terms of Service
+            </Link>
+            {' '}
+            and{' '}
             <Link to="/privacy" className="underline hover:text-text transition-colors">
               Privacy Policy
             </Link>

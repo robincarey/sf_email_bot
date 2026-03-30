@@ -463,10 +463,11 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
       </h2>
       <p className="mb-6">
         If you have questions or comments about this notice, please contact us via the{" "}
-        <a href="/app/contact" className="text-brand underline hover:text-brand-dark">
-          contact form
-        </a>{" "}
-        on our website.
+        <a href="/app/contact" className="text-brand underline hover:text-brand-dark">contact form</a>{" "}
+        (login required) or email us at{" "}
+        <a href="mailto:sf.stock.updates@gmail.com" className="text-brand underline hover:text-brand-dark">
+          sf.stock.updates@gmail.com
+        </a>
       </p>
 
       {/* Section 14 */}
@@ -480,11 +481,12 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
         <a href="/app/preferences" className="text-brand underline hover:text-brand-dark">
           account preferences page
         </a>
-        . For data deletion or export requests, please use the{" "}
-        <a href="/app/contact" className="text-brand underline hover:text-brand-dark">
-          contact form
+        . For data deletion or export requests, please contact us via the{" "}
+        <a href="/app/contact" className="text-brand underline hover:text-brand-dark">contact form</a>{" "}
+        (login required) or email us at{" "}
+        <a href="mailto:sf.stock.updates@gmail.com" className="text-brand underline hover:text-brand-dark">
+          sf.stock.updates@gmail.com
         </a>
-        .
       </p>
 
       <p className="mt-12 text-xs text-text-muted">

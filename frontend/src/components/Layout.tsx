@@ -83,11 +83,14 @@ export default function Layout({ children }: { children?: React.ReactNode }) {
       </main>
 
       <footer className="border-t border-border bg-surface py-3">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6 flex justify-center sm:justify-end">
-          <Link
-            to="/privacy"
-            className="text-xs text-text-muted hover:text-text transition-colors"
-          >
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 flex flex-wrap justify-center sm:justify-end gap-x-3 gap-y-1 text-xs text-text-muted">
+          <Link to="/terms" className="hover:text-text transition-colors">
+            Terms of Service
+          </Link>
+          <span className="hidden sm:inline" aria-hidden>
+            ·
+          </span>
+          <Link to="/privacy" className="hover:text-text transition-colors">
             Privacy Policy
           </Link>
         </div>
