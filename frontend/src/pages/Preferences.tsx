@@ -14,6 +14,7 @@ export default function Preferences() {
   const { user } = useAuth()
   const [searchParams] = useSearchParams()
   const [pauseAll, setPauseAll] = useState(false)
+  const [receiveAnnouncements, setReceiveAnnouncements] = useState(true)
   const [stores, setStores] = useState<StorePreference[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -27,7 +28,7 @@ export default function Preferences() {
       const [profileResp, storeResp] = await Promise.all([
         supabase
           .from('profiles')
-          .select('pause_all_alerts')
+          .select('pause_all_alerts, receive_announcements')
           .eq('id', user!.id)
           .single(),
         supabase
@@ -38,6 +39,7 @@ export default function Preferences() {
 
       if (profileResp.data) {
         setPauseAll(profileResp.data.pause_all_alerts)
+        setReceiveAnnouncements(profileResp.data.receive_announcements)
       }
       if (storeResp.data) {
         setStores(storeResp.data)
@@ -82,6 +84,17 @@ export default function Preferences() {
       .from('user_store_preferences')
       .update({ enabled })
       .eq('id', id)
+    setSaving(false)
+  }
+
+  const toggleAnnouncements = async () => {
+    const next = !receiveAnnouncements
+    setReceiveAnnouncements(next)
+    setSaving(true)
+    await supabase
+      .from('profiles')
+      .update({ receive_announcements: next })
+      .eq('id', user!.id)
     setSaving(false)
   }
 
@@ -146,6 +159,32 @@ export default function Preferences() {
             <span
               className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition-transform duration-200 ${
                 pauseAll ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+
+      {/* Announcement emails */}
+      <div className="rounded-xl bg-surface border border-border p-6 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-text">Product announcements</h3>
+            <p className="text-sm text-text-muted mt-0.5">
+              Receive occasional service updates and feature announcements
+            </p>
+          </div>
+          <button
+            onClick={toggleAnnouncements}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+              receiveAnnouncements ? 'bg-brand' : 'bg-gray-200 dark:bg-gray-600'
+            }`}
+            role="switch"
+            aria-checked={receiveAnnouncements}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition-transform duration-200 ${
+                receiveAnnouncements ? 'translate-x-5' : 'translate-x-0'
               }`}
             />
           </button>
