@@ -201,7 +201,7 @@ export default function Preferences() {
           Tip: You can watch individual items from the Dashboard to get alerts for them regardless of store settings.
         </p>
         <div className="divide-y divide-border">
-          {stores.map((s) => (
+          {[...stores].sort((a, b) => a.store_name.localeCompare(b.store_name)).map((s) => (
             <StoreToggle
               key={s.id}
               storeName={s.store_name}
