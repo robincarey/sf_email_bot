@@ -3,13 +3,13 @@ import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 
 const navItems = [
-  { to: '/', label: 'Dashboard' },
-  { to: '/items', label: 'Items' },
-  { to: '/preferences', label: 'Preferences' },
+  { to: '/app', label: 'Dashboard', end: true },
+  { to: '/app/items', label: 'Items' },
+  { to: '/app/preferences', label: 'Preferences' },
   { to: '/privacy', label: 'Privacy' },
-  { to: '/contact', label: 'Contact' },
-  { to: '/account', label: 'Account' },
-]
+  { to: '/app/contact', label: 'Contact' },
+  { to: '/app/account', label: 'Account' },
+] as const
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme()
@@ -63,6 +63,7 @@ export default function Layout() {
               <NavLink
                 key={item.to}
                 to={item.to}
+                end={'end' in item ? item.end : false}
                 className={({ isActive }) =>
                   `px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
                     isActive

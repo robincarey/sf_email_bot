@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext'
 export default function Login() {
   const { user, loading } = useAuth()
   const location = useLocation()
-  const next = new URLSearchParams(location.search).get('next') || '/'
+  const next = new URLSearchParams(location.search).get('next') || '/app'
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)

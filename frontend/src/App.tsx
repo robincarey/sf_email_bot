@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Analytics } from '@vercel/analytics/react'
 import { AuthProvider } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
@@ -12,6 +12,11 @@ import Contact from './pages/Contact'
 import Items from './pages/Items'
 import Privacy from './pages/Privacy'
 
+function RedirectWithSearch({ to }: { to: string }) {
+  const { search } = useLocation()
+  return <Navigate to={`${to}${search}`} replace />
+}
+
 export default function App() {
   return (
     <ThemeProvider>
@@ -20,7 +25,12 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/privacy" element={<Privacy />} />
+            <Route path="/items" element={<RedirectWithSearch to="/app/items" />} />
+            <Route path="/preferences" element={<RedirectWithSearch to="/app/preferences" />} />
+            <Route path="/contact" element={<RedirectWithSearch to="/app/contact" />} />
+            <Route path="/account" element={<RedirectWithSearch to="/app/account" />} />
             <Route
+              path="/app"
               element={
                 <ProtectedRoute>
                   <Layout />
@@ -33,6 +43,7 @@ export default function App() {
               <Route path="contact" element={<Contact />} />
               <Route path="account" element={<Account />} />
             </Route>
+            <Route path="/" element={<Navigate to="/app" replace />} />
           </Routes>
           <Analytics />
         </AuthProvider>

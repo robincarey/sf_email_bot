@@ -18,7 +18,7 @@ export default function Privacy() {
         <strong>Questions or concerns?</strong> Reading this Privacy Notice will help you understand
         your privacy rights and choices. If you do not agree with our policies and practices, please
         do not use our Services. If you have questions, please contact us via the{" "}
-        <a href="/contact" className="text-blue-600 underline">
+        <a href="/app/contact" className="text-blue-600 underline">
           contact form
         </a>
         .
@@ -51,7 +51,7 @@ export default function Privacy() {
         </li>
         <li>
           <strong>How do you exercise your rights?</strong> Visit our{" "}
-          <a href="/contact" className="text-blue-600 underline">
+          <a href="/app/contact" className="text-blue-600 underline">
             contact page
           </a>{" "}
           or manage preferences in your account settings.
@@ -243,7 +243,7 @@ export default function Privacy() {
         We do not knowingly collect data from or market to children under 18 years of age. By using
         the Services, you represent that you are at least 18. If you become aware of any data we
         may have collected from a minor, please contact us via the{" "}
-        <a href="/contact" className="text-blue-600 underline">
+        <a href="/app/contact" className="text-blue-600 underline">
           contact form
         </a>
         .
@@ -267,11 +267,11 @@ export default function Privacy() {
       <p className="mb-4">
         You can manage your notification preferences and deactivate your account at any time via
         your{" "}
-        <a href="/preferences" className="text-blue-600 underline">
+        <a href="/app/preferences" className="text-blue-600 underline">
           account preferences page
         </a>
         . For other requests, contact us via the{" "}
-        <a href="/contact" className="text-blue-600 underline">
+        <a href="/app/contact" className="text-blue-600 underline">
           contact form
         </a>
         .
@@ -434,7 +434,7 @@ export default function Privacy() {
       <h3 className="font-semibold text-gray-900 mt-6 mb-2">How to Exercise Your Rights</h3>
       <p className="mb-6">
         To exercise these rights, please visit our{" "}
-        <a href="/contact" className="text-blue-600 underline">
+        <a href="/app/contact" className="text-blue-600 underline">
           contact page
         </a>{" "}
         or manage your preferences directly in your account settings.
@@ -456,7 +456,7 @@ export default function Privacy() {
       </h2>
       <p className="mb-6">
         If you have questions or comments about this notice, please contact us via the{" "}
-        <a href="/contact" className="text-blue-600 underline">
+        <a href="/app/contact" className="text-blue-600 underline">
           contact form
         </a>{" "}
         on our website.
@@ -470,11 +470,11 @@ export default function Privacy() {
         You have the right to request access to, correction of, or deletion of your personal
         information. You can manage your notification preferences and deactivate your account at
         any time via your{" "}
-        <a href="/preferences" className="text-blue-600 underline">
+        <a href="/app/preferences" className="text-blue-600 underline">
           account preferences page
         </a>
         . For data deletion or export requests, please use the{" "}
-        <a href="/contact" className="text-blue-600 underline">
+        <a href="/app/contact" className="text-blue-600 underline">
           contact form
         </a>
         .

@@ -110,7 +110,7 @@ export default function Dashboard() {
               />
             </button>
             <Link
-              to="/preferences"
+              to="/app/preferences"
               className="text-sm text-brand hover:text-brand-dark font-medium"
             >
               All preferences &rarr;
