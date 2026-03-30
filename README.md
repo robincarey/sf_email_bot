@@ -85,6 +85,7 @@ npm install
 | `AWS_SES_REGION` | AWS region where SES is configured (e.g. `us-east-1`) |
 | `SES_FROM_ADDRESS` | Verified SES sender address (must match SES configuration) |
 | `RUN_MODE` | `prod` (default) or `dev` |
+| `SEED_MODE` | set to `true` (or `1`) to run baseline catalog seeding (`run_log.status="seed"`) without generating `item_events` or sending emails |
 | `ADMIN_EMAILS` | JSON array of emails for dev-mode testing, e.g. `'["you@example.com"]'` |
 
 Ensure the **Lambda IAM role** attached to the function includes `ses:SendEmail` (and that the `Source` address or domain is verified in SES).

@@ -15,6 +15,12 @@ logger.setLevel(logging.INFO)
 
 run_mode = os.getenv('RUN_MODE', 'prod').lower()
 
+# Seed mode is a special operational mode used to establish the baseline catalog
+# for a new store without generating "New Item" events (and without sending emails).
+seed_mode = os.getenv('SEED_MODE', '').lower()
+if seed_mode in {'1', 'true', 'yes', 'y', 'on'}:
+    run_mode = 'seed'
+
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
@@ -305,12 +311,19 @@ def check_for_updates(store_filter=None):
     logger.info(f"[{run_id}] Starting update check.")
     insert_run_log(run_id)
 
-    recipients = get_recipients_for_run(run_id)
-    seen_items = load_seen_items(run_id)
-    seen_items_dict = {
-        item['link']: {k: v for k, v in item.items() if k != 'link'}
-        for item in seen_items
-    }
+    is_seed_mode = run_mode == 'seed'
+    if is_seed_mode:
+        logger.info(f"[{run_id}] SEED_MODE active (run_mode=seed). Scraping + baseline upsert only.")
+        recipients = []
+        seen_items = []
+        seen_items_dict = {}
+    else:
+        recipients = get_recipients_for_run(run_id)
+        seen_items = load_seen_items(run_id)
+        seen_items_dict = {
+            item['link']: {k: v for k, v in item.items() if k != 'link'}
+            for item in seen_items
+        }
 
     if store_filter is not None:
         if store_filter not in STORE_CHECKS:
@@ -328,7 +341,38 @@ def check_for_updates(store_filter=None):
 
     if not new_items:
         logger.warning(f"[{run_id}] Scraper returned no items; skipping diff and upsert.")
-        update_run_log(run_id, status="empty_scrape")
+        update_run_log(
+            run_id,
+            items_scraped=0,
+            events_created=0,
+            emails_attempted=0,
+            emails_sent=0,
+            status="seed" if is_seed_mode else "empty_scrape",
+        )
+        return
+
+    # Seed mode: establish baseline catalog + daily snapshots, but do not generate events.
+    if is_seed_mode:
+        for item in new_items:
+            item["typed_price_cents"] = parse_price_cents(item.get("price"))
+
+        save_seen_items(new_items, run_id)
+
+        all_links = [item["link"] for item in new_items]
+        all_link_to_id = fetch_item_ids_by_link(all_links, run_id)
+
+        # Daily snapshots are idempotent per day via unique(snapshot_date, item_id).
+        insert_daily_snapshots(new_items, all_link_to_id, run_id)
+
+        update_run_log(
+            run_id,
+            items_scraped=len(new_items),
+            events_created=0,
+            emails_attempted=0,
+            emails_sent=0,
+            status="seed",
+        )
+        logger.info(f"[{run_id}] Seed run complete.")
         return
 
     seen_set = {frozenset(s.items()) for s in seen_items}
