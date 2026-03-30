@@ -1,10 +1,12 @@
 import { useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 
 export default function Login() {
   const { user, loading } = useAuth()
+  const location = useLocation()
+  const next = new URLSearchParams(location.search).get('next') || '/'
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -19,7 +21,7 @@ export default function Login() {
   }
 
   if (user) {
-    return <Navigate to="/" replace />
+    return <Navigate to={next} replace />
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -94,6 +96,14 @@ export default function Login() {
               </button>
             </form>
           )}
+
+          <p className="mt-6 text-center text-xs text-text-muted">
+            By continuing, you agree to our{' '}
+            <Link to="/privacy" className="underline hover:text-text transition-colors">
+              Privacy Policy
+            </Link>
+            .
+          </p>
         </div>
       </div>
     </div>
