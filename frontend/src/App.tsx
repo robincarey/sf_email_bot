@@ -17,6 +17,17 @@ function RedirectWithSearch({ to }: { to: string }) {
   return <Navigate to={`${to}${search}`} replace />
 }
 
+/** Preserves hash/query so Supabase magic-link tokens on `/` are not stripped when sending users to `/app`. */
+function RootToApp() {
+  const { search, hash } = useLocation()
+  return (
+    <Navigate
+      to={{ pathname: '/app', search, hash }}
+      replace
+    />
+  )
+}
+
 export default function App() {
   return (
     <ThemeProvider>
@@ -43,7 +54,7 @@ export default function App() {
               <Route path="contact" element={<Contact />} />
               <Route path="account" element={<Account />} />
             </Route>
-            <Route path="/" element={<Navigate to="/app" replace />} />
+            <Route path="/" element={<RootToApp />} />
           </Routes>
           <Analytics />
         </AuthProvider>
