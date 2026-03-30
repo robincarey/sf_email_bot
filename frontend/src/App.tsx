@@ -19,6 +19,7 @@ export default function App() {
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/privacy" element={<Privacy />} />
             <Route
               element={
                 <ProtectedRoute>
@@ -30,7 +31,6 @@ export default function App() {
               <Route path="items" element={<Items />} />
               <Route path="preferences" element={<Preferences />} />
               <Route path="contact" element={<Contact />} />
-              <Route path="privacy" element={<Privacy />} />
               <Route path="account" element={<Account />} />
             </Route>
           </Routes>

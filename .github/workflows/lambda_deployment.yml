@@ -41,6 +41,7 @@ jobs:
               pip install -r requirements.txt -t build/ &&
               cp lambda_function.py build/ &&
               cp broken_binding_sf.py build/ &&
+              cp folio_society_sf.py build/ &&
               cp email_notifier.py build/ &&
               PYTHONPATH=build python -c 'import supabase, pydantic_core, requests, bs4; print(\"imports ok\")'
             "

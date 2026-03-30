@@ -3,9 +3,11 @@ import os
 import re
 import uuid
 import logging
+import argparse
 from datetime import datetime, timezone
 from supabase import create_client
 from broken_binding_sf import broken_binding_checks
+from folio_society_sf import folio_society_checks
 from email_notifier import send_email
 
 logger = logging.getLogger()
@@ -17,6 +19,10 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 _supabase_client = None
+STORE_CHECKS = {
+    "Broken Binding": broken_binding_checks,
+    "Folio Society - Sci-Fi & Fantasy": folio_society_checks,
+}
 
 def get_supabase():
     global _supabase_client
@@ -286,7 +292,7 @@ def _build_email_table(items):
     """
 
 
-def check_for_updates():
+def check_for_updates(store_filter=None):
     run_id = str(uuid.uuid4())
     logger.info(f"[{run_id}] Starting update check.")
     insert_run_log(run_id)
@@ -298,7 +304,20 @@ def check_for_updates():
         for item in seen_items
     }
 
-    new_items = broken_binding_checks()
+    if store_filter is not None:
+        if store_filter not in STORE_CHECKS:
+            allowed_values = ", ".join(sorted(STORE_CHECKS.keys()))
+            raise ValueError(
+                f"Invalid store '{store_filter}'. Allowed values: {allowed_values}"
+            )
+        new_items = STORE_CHECKS[store_filter]()
+        logger.info(f"[{run_id}] Running single-store scrape for: {store_filter}")
+    else:
+        new_items = []
+        for store_name, check_fn in STORE_CHECKS.items():
+            logger.info(f"[{run_id}] Running scraper for store: {store_name}")
+            new_items.extend(check_fn())
+
     if not new_items:
         logger.warning(f"[{run_id}] Scraper returned no items; skipping diff and upsert.")
         update_run_log(run_id, status="empty_scrape")
@@ -513,8 +532,16 @@ def lambda_handler(event, context):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Run stock update checks.")
+    parser.add_argument(
+        "--store",
+        choices=sorted(STORE_CHECKS.keys()),
+        help="Run checks for only one store.",
+    )
+    args = parser.parse_args()
+
     try:
-        check_for_updates()
+        check_for_updates(store_filter=args.store)
         print('Update check completed!')
     except Exception as e:
         print(f"Error: {e}")
