@@ -4,18 +4,18 @@ import Layout from '../components/Layout'
 export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
   return (
     <div
-      className={`max-w-3xl mx-auto text-sm text-gray-700 leading-relaxed ${
+      className={`max-w-3xl mx-auto text-sm text-text leading-relaxed ${
         embedded ? 'px-0 py-2' : 'px-6 py-12'
       }`}
     >
-      <h1 className="text-3xl font-bold text-gray-900 mb-2">Privacy Policy</h1>
-      <p className="text-gray-500 mb-10">Last updated March 30, 2026</p>
+      <h1 className="text-3xl font-bold text-text mb-2">Privacy Policy</h1>
+      <p className="text-text-muted mb-10">Last updated March 30, 2026</p>
 
       <p className="mb-6">
         This Privacy Notice for SFF Stock Alerts ("we," "us," or "our") describes how and why we
         might access, collect, store, use, and/or share ("process") your personal information when
         you use our services ("Services"), including when you visit our website at{" "}
-        <a href="https://sffstock.com" className="text-blue-600 underline">
+        <a href="https://sffstock.com" className="text-brand underline hover:text-brand-dark">
           https://sffstock.com
         </a>{" "}
         or engage with us in other related ways.
@@ -25,14 +25,14 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
         <strong>Questions or concerns?</strong> Reading this Privacy Notice will help you understand
         your privacy rights and choices. If you do not agree with our policies and practices, please
         do not use our Services. If you have questions, please contact us via the{" "}
-        <a href="/app/contact" className="text-blue-600 underline">
+        <a href="/app/contact" className="text-brand underline hover:text-brand-dark">
           contact form
         </a>
         .
       </p>
 
       {/* Summary */}
-      <h2 className="text-xl font-bold text-gray-900 mt-10 mb-4">Summary of Key Points</h2>
+      <h2 className="text-xl font-bold text-text mt-10 mb-4">Summary of Key Points</h2>
       <ul className="list-disc pl-6 space-y-3 mb-10">
         <li>
           <strong>What personal information do we process?</strong> We collect your email address
@@ -58,7 +58,7 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
         </li>
         <li>
           <strong>How do you exercise your rights?</strong> Visit our{" "}
-          <a href="/app/contact" className="text-blue-600 underline">
+          <a href="/app/contact" className="text-brand underline hover:text-brand-dark">
             contact page
           </a>{" "}
           or manage preferences in your account settings.
@@ -66,29 +66,29 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
       </ul>
 
       {/* TOC */}
-      <h2 className="text-xl font-bold text-gray-900 mt-10 mb-4">Table of Contents</h2>
+      <h2 className="text-xl font-bold text-text mt-10 mb-4">Table of Contents</h2>
       <ol className="list-decimal pl-6 space-y-1 mb-10">
-        <li><a href="#infocollect" className="text-blue-600 underline">What Information Do We Collect?</a></li>
-        <li><a href="#infouse" className="text-blue-600 underline">How Do We Process Your Information?</a></li>
-        <li><a href="#legalbases" className="text-blue-600 underline">What Legal Bases Do We Rely On?</a></li>
-        <li><a href="#whoshare" className="text-blue-600 underline">When and With Whom Do We Share Your Information?</a></li>
-        <li><a href="#cookies" className="text-blue-600 underline">Do We Use Cookies and Other Tracking Technologies?</a></li>
-        <li><a href="#inforetain" className="text-blue-600 underline">How Long Do We Keep Your Information?</a></li>
-        <li><a href="#infosafe" className="text-blue-600 underline">How Do We Keep Your Information Safe?</a></li>
-        <li><a href="#infominors" className="text-blue-600 underline">Do We Collect Information From Minors?</a></li>
-        <li><a href="#privacyrights" className="text-blue-600 underline">What Are Your Privacy Rights?</a></li>
-        <li><a href="#DNT" className="text-blue-600 underline">Controls for Do-Not-Track Features</a></li>
-        <li><a href="#uslaws" className="text-blue-600 underline">Do United States Residents Have Specific Privacy Rights?</a></li>
-        <li><a href="#policyupdates" className="text-blue-600 underline">Do We Make Updates to This Notice?</a></li>
-        <li><a href="#contact" className="text-blue-600 underline">How Can You Contact Us About This Notice?</a></li>
-        <li><a href="#request" className="text-blue-600 underline">How Can You Review, Update, or Delete Your Data?</a></li>
+        <li><a href="#infocollect" className="text-brand underline hover:text-brand-dark">What Information Do We Collect?</a></li>
+        <li><a href="#infouse" className="text-brand underline hover:text-brand-dark">How Do We Process Your Information?</a></li>
+        <li><a href="#legalbases" className="text-brand underline hover:text-brand-dark">What Legal Bases Do We Rely On?</a></li>
+        <li><a href="#whoshare" className="text-brand underline hover:text-brand-dark">When and With Whom Do We Share Your Information?</a></li>
+        <li><a href="#cookies" className="text-brand underline hover:text-brand-dark">Do We Use Cookies and Other Tracking Technologies?</a></li>
+        <li><a href="#inforetain" className="text-brand underline hover:text-brand-dark">How Long Do We Keep Your Information?</a></li>
+        <li><a href="#infosafe" className="text-brand underline hover:text-brand-dark">How Do We Keep Your Information Safe?</a></li>
+        <li><a href="#infominors" className="text-brand underline hover:text-brand-dark">Do We Collect Information From Minors?</a></li>
+        <li><a href="#privacyrights" className="text-brand underline hover:text-brand-dark">What Are Your Privacy Rights?</a></li>
+        <li><a href="#DNT" className="text-brand underline hover:text-brand-dark">Controls for Do-Not-Track Features</a></li>
+        <li><a href="#uslaws" className="text-brand underline hover:text-brand-dark">Do United States Residents Have Specific Privacy Rights?</a></li>
+        <li><a href="#policyupdates" className="text-brand underline hover:text-brand-dark">Do We Make Updates to This Notice?</a></li>
+        <li><a href="#contact" className="text-brand underline hover:text-brand-dark">How Can You Contact Us About This Notice?</a></li>
+        <li><a href="#request" className="text-brand underline hover:text-brand-dark">How Can You Review, Update, or Delete Your Data?</a></li>
       </ol>
 
       {/* Section 1 */}
-      <h2 id="infocollect" className="text-xl font-bold text-gray-900 mt-10 mb-4">
+      <h2 id="infocollect" className="text-xl font-bold text-text mt-10 mb-4">
         1. What Information Do We Collect?
       </h2>
-      <h3 className="font-semibold text-gray-900 mb-2">Personal information you disclose to us</h3>
+      <h3 className="font-semibold text-text mb-2">Personal information you disclose to us</h3>
       <p className="mb-4">
         We collect personal information that you voluntarily provide when you register on the
         Services or otherwise contact us. This includes:
@@ -101,7 +101,7 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
         We do not process sensitive personal information.
       </p>
 
-      <h3 className="font-semibold text-gray-900 mb-2">Information automatically collected</h3>
+      <h3 className="font-semibold text-text mb-2">Information automatically collected</h3>
       <p className="mb-4">
         Some information is collected automatically when you visit our Services, such as your IP
         address and browser characteristics. This information is used to maintain security and
@@ -123,7 +123,7 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
       </ul>
 
       {/* Section 2 */}
-      <h2 id="infouse" className="text-xl font-bold text-gray-900 mt-10 mb-4">
+      <h2 id="infouse" className="text-xl font-bold text-text mt-10 mb-4">
         2. How Do We Process Your Information?
       </h2>
       <p className="mb-4">
@@ -149,7 +149,7 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
       </ul>
 
       {/* Section 3 */}
-      <h2 id="legalbases" className="text-xl font-bold text-gray-900 mt-10 mb-4">
+      <h2 id="legalbases" className="text-xl font-bold text-text mt-10 mb-4">
         3. What Legal Bases Do We Rely On?
       </h2>
       <p className="mb-4">
@@ -185,7 +185,7 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
       </p>
 
       {/* Section 4 */}
-      <h2 id="whoshare" className="text-xl font-bold text-gray-900 mt-10 mb-4">
+      <h2 id="whoshare" className="text-xl font-bold text-text mt-10 mb-4">
         4. When and With Whom Do We Share Your Personal Information?
       </h2>
       <p className="mb-4">
@@ -211,7 +211,7 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
       </p>
 
       {/* Section 5 */}
-      <h2 id="cookies" className="text-xl font-bold text-gray-900 mt-10 mb-4">
+      <h2 id="cookies" className="text-xl font-bold text-text mt-10 mb-4">
         5. Do We Use Cookies and Other Tracking Technologies?
       </h2>
       <p className="mb-6">
@@ -221,7 +221,7 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
       </p>
 
       {/* Section 6 */}
-      <h2 id="inforetain" className="text-xl font-bold text-gray-900 mt-10 mb-4">
+      <h2 id="inforetain" className="text-xl font-bold text-text mt-10 mb-4">
         6. How Long Do We Keep Your Information?
       </h2>
       <p className="mb-6">
@@ -232,7 +232,7 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
       </p>
 
       {/* Section 7 */}
-      <h2 id="infosafe" className="text-xl font-bold text-gray-900 mt-10 mb-4">
+      <h2 id="infosafe" className="text-xl font-bold text-text mt-10 mb-4">
         7. How Do We Keep Your Information Safe?
       </h2>
       <p className="mb-6">
@@ -243,21 +243,21 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
       </p>
 
       {/* Section 8 */}
-      <h2 id="infominors" className="text-xl font-bold text-gray-900 mt-10 mb-4">
+      <h2 id="infominors" className="text-xl font-bold text-text mt-10 mb-4">
         8. Do We Collect Information From Minors?
       </h2>
       <p className="mb-6">
         We do not knowingly collect data from or market to children under 18 years of age. By using
         the Services, you represent that you are at least 18. If you become aware of any data we
         may have collected from a minor, please contact us via the{" "}
-        <a href="/app/contact" className="text-blue-600 underline">
+        <a href="/app/contact" className="text-brand underline hover:text-brand-dark">
           contact form
         </a>
         .
       </p>
 
       {/* Section 9 */}
-      <h2 id="privacyrights" className="text-xl font-bold text-gray-900 mt-10 mb-4">
+      <h2 id="privacyrights" className="text-xl font-bold text-text mt-10 mb-4">
         9. What Are Your Privacy Rights?
       </h2>
       <p className="mb-4">
@@ -274,11 +274,11 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
       <p className="mb-4">
         You can manage your notification preferences and deactivate your account at any time via
         your{" "}
-        <a href="/app/preferences" className="text-blue-600 underline">
+        <a href="/app/preferences" className="text-brand underline hover:text-brand-dark">
           account preferences page
         </a>
         . For other requests, contact us via the{" "}
-        <a href="/app/contact" className="text-blue-600 underline">
+        <a href="/app/contact" className="text-brand underline hover:text-brand-dark">
           contact form
         </a>
         .
@@ -288,7 +288,7 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
         information, you have the right to complain to your{" "}
         <a
           href="https://ec.europa.eu/justice/data-protection/bodies/authorities/index_en.htm"
-          className="text-blue-600 underline"
+          className="text-brand underline hover:text-brand-dark"
           target="_blank"
           rel="noopener noreferrer"
         >
@@ -297,7 +297,7 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
         or the{" "}
         <a
           href="https://ico.org.uk/make-a-complaint/data-protection-complaints/data-protection-complaints/"
-          className="text-blue-600 underline"
+          className="text-brand underline hover:text-brand-dark"
           target="_blank"
           rel="noopener noreferrer"
         >
@@ -309,7 +309,7 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
         If you are in Switzerland, you may contact the{" "}
         <a
           href="https://www.edoeb.admin.ch/edoeb/en/home.html"
-          className="text-blue-600 underline"
+          className="text-brand underline hover:text-brand-dark"
           target="_blank"
           rel="noopener noreferrer"
         >
@@ -319,7 +319,7 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
       </p>
 
       {/* Section 10 */}
-      <h2 id="DNT" className="text-xl font-bold text-gray-900 mt-10 mb-4">
+      <h2 id="DNT" className="text-xl font-bold text-text mt-10 mb-4">
         10. Controls for Do-Not-Track Features
       </h2>
       <p className="mb-6">
@@ -329,7 +329,7 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
       </p>
 
       {/* Section 11 */}
-      <h2 id="uslaws" className="text-xl font-bold text-gray-900 mt-10 mb-4">
+      <h2 id="uslaws" className="text-xl font-bold text-text mt-10 mb-4">
         11. Do United States Residents Have Specific Privacy Rights?
       </h2>
       <p className="mb-4">
@@ -339,76 +339,76 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
       </p>
 
       <div className="overflow-x-auto mb-6">
-        <table className="w-full border-collapse border border-gray-300 text-sm">
+        <table className="w-full border-collapse border border-border text-sm">
           <thead>
-            <tr className="bg-gray-50">
-              <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Category</th>
-              <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Examples</th>
-              <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Collected</th>
+            <tr className="bg-surface-alt">
+              <th className="border border-border px-3 py-2 text-left font-semibold">Category</th>
+              <th className="border border-border px-3 py-2 text-left font-semibold">Examples</th>
+              <th className="border border-border px-3 py-2 text-left font-semibold">Collected</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td className="border border-gray-300 px-3 py-2">A. Identifiers</td>
-              <td className="border border-gray-300 px-3 py-2">Email address, online identifier, IP address</td>
-              <td className="border border-gray-300 px-3 py-2">YES</td>
+              <td className="border border-border px-3 py-2">A. Identifiers</td>
+              <td className="border border-border px-3 py-2">Email address, online identifier, IP address</td>
+              <td className="border border-border px-3 py-2">YES</td>
             </tr>
             <tr>
-              <td className="border border-gray-300 px-3 py-2">B. California Customer Records</td>
-              <td className="border border-gray-300 px-3 py-2">Name, contact information, financial information</td>
-              <td className="border border-gray-300 px-3 py-2">NO</td>
+              <td className="border border-border px-3 py-2">B. California Customer Records</td>
+              <td className="border border-border px-3 py-2">Name, contact information, financial information</td>
+              <td className="border border-border px-3 py-2">NO</td>
             </tr>
             <tr>
-              <td className="border border-gray-300 px-3 py-2">C. Protected classification characteristics</td>
-              <td className="border border-gray-300 px-3 py-2">Gender, age, race, ethnicity</td>
-              <td className="border border-gray-300 px-3 py-2">NO</td>
+              <td className="border border-border px-3 py-2">C. Protected classification characteristics</td>
+              <td className="border border-border px-3 py-2">Gender, age, race, ethnicity</td>
+              <td className="border border-border px-3 py-2">NO</td>
             </tr>
             <tr>
-              <td className="border border-gray-300 px-3 py-2">D. Commercial information</td>
-              <td className="border border-gray-300 px-3 py-2">Purchase history, financial details</td>
-              <td className="border border-gray-300 px-3 py-2">NO</td>
+              <td className="border border-border px-3 py-2">D. Commercial information</td>
+              <td className="border border-border px-3 py-2">Purchase history, financial details</td>
+              <td className="border border-border px-3 py-2">NO</td>
             </tr>
             <tr>
-              <td className="border border-gray-300 px-3 py-2">E. Biometric information</td>
-              <td className="border border-gray-300 px-3 py-2">Fingerprints, voiceprints</td>
-              <td className="border border-gray-300 px-3 py-2">NO</td>
+              <td className="border border-border px-3 py-2">E. Biometric information</td>
+              <td className="border border-border px-3 py-2">Fingerprints, voiceprints</td>
+              <td className="border border-border px-3 py-2">NO</td>
             </tr>
             <tr>
-              <td className="border border-gray-300 px-3 py-2">F. Internet or network activity</td>
-              <td className="border border-gray-300 px-3 py-2">Browsing history, interactions with our site</td>
-              <td className="border border-gray-300 px-3 py-2">NO</td>
+              <td className="border border-border px-3 py-2">F. Internet or network activity</td>
+              <td className="border border-border px-3 py-2">Browsing history, interactions with our site</td>
+              <td className="border border-border px-3 py-2">NO</td>
             </tr>
             <tr>
-              <td className="border border-gray-300 px-3 py-2">G. Geolocation data</td>
-              <td className="border border-gray-300 px-3 py-2">
+              <td className="border border-border px-3 py-2">G. Geolocation data</td>
+              <td className="border border-border px-3 py-2">
                 IP-derived approximate location only (no precise device location collected)
               </td>
-              <td className="border border-gray-300 px-3 py-2">NO</td>
+              <td className="border border-border px-3 py-2">NO</td>
             </tr>
             <tr>
-              <td className="border border-gray-300 px-3 py-2">H. Audio, electronic, sensory information</td>
-              <td className="border border-gray-300 px-3 py-2">Images, audio, video recordings</td>
-              <td className="border border-gray-300 px-3 py-2">NO</td>
+              <td className="border border-border px-3 py-2">H. Audio, electronic, sensory information</td>
+              <td className="border border-border px-3 py-2">Images, audio, video recordings</td>
+              <td className="border border-border px-3 py-2">NO</td>
             </tr>
             <tr>
-              <td className="border border-gray-300 px-3 py-2">I. Professional or employment information</td>
-              <td className="border border-gray-300 px-3 py-2">Job title, work history</td>
-              <td className="border border-gray-300 px-3 py-2">NO</td>
+              <td className="border border-border px-3 py-2">I. Professional or employment information</td>
+              <td className="border border-border px-3 py-2">Job title, work history</td>
+              <td className="border border-border px-3 py-2">NO</td>
             </tr>
             <tr>
-              <td className="border border-gray-300 px-3 py-2">J. Education information</td>
-              <td className="border border-gray-300 px-3 py-2">Student records</td>
-              <td className="border border-gray-300 px-3 py-2">NO</td>
+              <td className="border border-border px-3 py-2">J. Education information</td>
+              <td className="border border-border px-3 py-2">Student records</td>
+              <td className="border border-border px-3 py-2">NO</td>
             </tr>
             <tr>
-              <td className="border border-gray-300 px-3 py-2">K. Inferences from personal information</td>
-              <td className="border border-gray-300 px-3 py-2">Profiles of preferences or characteristics</td>
-              <td className="border border-gray-300 px-3 py-2">NO</td>
+              <td className="border border-border px-3 py-2">K. Inferences from personal information</td>
+              <td className="border border-border px-3 py-2">Profiles of preferences or characteristics</td>
+              <td className="border border-border px-3 py-2">NO</td>
             </tr>
             <tr>
-              <td className="border border-gray-300 px-3 py-2">L. Sensitive personal information</td>
-              <td className="border border-gray-300 px-3 py-2">—</td>
-              <td className="border border-gray-300 px-3 py-2">NO</td>
+              <td className="border border-border px-3 py-2">L. Sensitive personal information</td>
+              <td className="border border-border px-3 py-2">—</td>
+              <td className="border border-border px-3 py-2">NO</td>
             </tr>
           </tbody>
         </table>
@@ -424,7 +424,7 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
         future.
       </p>
 
-      <h3 className="font-semibold text-gray-900 mt-6 mb-2">Your Rights</h3>
+      <h3 className="font-semibold text-text mt-6 mb-2">Your Rights</h3>
       <p className="mb-4">
         Depending on your state of residence, you may have the right to:
       </p>
@@ -438,17 +438,17 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
         <li>Opt out of the processing of your personal data for targeted advertising or sale</li>
       </ul>
 
-      <h3 className="font-semibold text-gray-900 mt-6 mb-2">How to Exercise Your Rights</h3>
+      <h3 className="font-semibold text-text mt-6 mb-2">How to Exercise Your Rights</h3>
       <p className="mb-6">
         To exercise these rights, please visit our{" "}
-        <a href="/app/contact" className="text-blue-600 underline">
+        <a href="/app/contact" className="text-brand underline hover:text-brand-dark">
           contact page
         </a>{" "}
         or manage your preferences directly in your account settings.
       </p>
 
       {/* Section 12 */}
-      <h2 id="policyupdates" className="text-xl font-bold text-gray-900 mt-10 mb-4">
+      <h2 id="policyupdates" className="text-xl font-bold text-text mt-10 mb-4">
         12. Do We Make Updates to This Notice?
       </h2>
       <p className="mb-6">
@@ -458,40 +458,40 @@ export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
       </p>
 
       {/* Section 13 */}
-      <h2 id="contact" className="text-xl font-bold text-gray-900 mt-10 mb-4">
+      <h2 id="contact" className="text-xl font-bold text-text mt-10 mb-4">
         13. How Can You Contact Us About This Notice?
       </h2>
       <p className="mb-6">
         If you have questions or comments about this notice, please contact us via the{" "}
-        <a href="/app/contact" className="text-blue-600 underline">
+        <a href="/app/contact" className="text-brand underline hover:text-brand-dark">
           contact form
         </a>{" "}
         on our website.
       </p>
 
       {/* Section 14 */}
-      <h2 id="request" className="text-xl font-bold text-gray-900 mt-10 mb-4">
+      <h2 id="request" className="text-xl font-bold text-text mt-10 mb-4">
         14. How Can You Review, Update, or Delete Your Data?
       </h2>
       <p className="mb-6">
         You have the right to request access to, correction of, or deletion of your personal
         information. You can manage your notification preferences and deactivate your account at
         any time via your{" "}
-        <a href="/app/preferences" className="text-blue-600 underline">
+        <a href="/app/preferences" className="text-brand underline hover:text-brand-dark">
           account preferences page
         </a>
         . For data deletion or export requests, please use the{" "}
-        <a href="/app/contact" className="text-blue-600 underline">
+        <a href="/app/contact" className="text-brand underline hover:text-brand-dark">
           contact form
         </a>
         .
       </p>
 
-      <p className="mt-12 text-xs text-gray-400">
+      <p className="mt-12 text-xs text-text-muted">
         This Privacy Policy was generated with assistance from{" "}
         <a
           href="https://termly.io/products/privacy-policy-generator/"
-          className="underline"
+          className="text-brand underline hover:text-brand-dark"
           target="_blank"
           rel="noopener noreferrer"
         >
