@@ -14,6 +14,7 @@ A **frontend dashboard** (Vite + React) lets users sign up, manage per-store ale
 
 - **Multi-store scraping** with retry logic and exponential backoff (Broken Binding + Folio Society)
 - **Change detection** — new items, restocks, out-of-stock, price changes, store changes
+- **Canonical per-link store handling** — if the same Broken Binding product URL appears in multiple collections during one run, the bot picks a deterministic canonical store per `items_seen.link` to prevent noisy `Store Change` events, while still matching emails to users who enabled any store the item appeared in.
 - **Per-event logging** — every detected change is recorded in `item_events` with a run-level UUID for traceability
 - **Per-recipient email tracking** — `email_log` records delivery success/failure per user, linked to events via `email_log_events`
 - **Per-store preferences** — users choose which stores they receive alerts for (Folio is added in migration `004`; new users default with Folio off until they opt in)

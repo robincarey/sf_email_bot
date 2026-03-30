@@ -29,9 +29,11 @@ def broken_binding_checks():
         {"url": "https://thebrokenbindingsub.com/collections/dragons-hoard", "store": "Broken Binding - Dragon's Hoard"},
         {"url": "https://thebrokenbindingsub.com/collections/the-graveyard", "store": "Broken Binding - The Graveyard"},
     ]
-    # Dedupe by canonical product link. This avoids duplicate constrained-key rows
-    # inside a single upsert call to Supabase (e.g. `upsert(... on_conflict="link")`).
-    products_by_link = {}
+    # Intentionally do NOT dedupe by `link` here.
+    # The same product URL can appear in multiple Broken Binding collections; the
+    # lambda will canonicalize per-link for items_seen/events, while still preserving
+    # multi-store membership for email/store matching.
+    product_list = []
 
     with requests.Session() as session:
         session.headers.update({
@@ -104,41 +106,20 @@ def broken_binding_checks():
                     if not link:
                         continue
 
-                    existing = products_by_link.get(link)
-                    if existing:
-                        # If any scrape instance shows the item is in stock, keep that.
-                        if not existing.get('in_stock') and in_stock:
-                            existing['in_stock'] = in_stock
-
-                        # Prefer a real price over "No price found".
-                        if (
-                            existing.get('price') == 'No price found' and
-                            product_price != 'No price found'
-                        ):
-                            existing['price'] = product_price
-
-                        # Keep the most informative fields we have.
-                        if existing.get('name') == 'No name found' and product_name != 'No name found':
-                            existing['name'] = product_name
-
-                        # Store naming can differ if a product appears in multiple collections.
-                        # Using the latest seen store keeps the catalog updated.
-                        existing['store'] = store
-                    else:
-                        products_by_link[link] = {
-                            'name': product_name,
-                            'price': product_price,
-                            'store': store,
-                            'link': link,
-                            'in_stock': in_stock
-                        }
+                    product_list.append({
+                        'name': product_name,
+                        'price': product_price,
+                        'store': store,
+                        'link': link,
+                        'in_stock': in_stock
+                    })
 
                     time.sleep(random.uniform(0.2, 0.6))
 
                 logger.info(f"Scraped {store} page {page}: {len(product_items)} products")
                 page += 1
 
-    return list(products_by_link.values())
+    return product_list
 
 
 if __name__ == "__main__":

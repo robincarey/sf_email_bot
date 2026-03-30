@@ -30,6 +30,22 @@ STORE_CHECKS = {
     "Folio Society - Sci-Fi & Fantasy": folio_society_checks,
 }
 
+BROKEN_BINDING_STORE_PRECEDENCE = [
+    # Order matches `broken_binding_sf.py` collection URL iteration.
+    "Broken Binding - To The Stars",
+    "Broken Binding - The Infirmary",
+    "Broken Binding - Dragon's Hoard",
+    "Broken Binding - The Graveyard",
+]
+
+STORE_PRECEDENCE = {
+    **{store: i for i, store in enumerate(BROKEN_BINDING_STORE_PRECEDENCE)},
+    "Folio Society - Sci-Fi & Fantasy": 1000,
+}
+
+PRICE_PLACEHOLDER = "No price found"
+NAME_PLACEHOLDER = "No name found"
+
 def get_supabase():
     global _supabase_client
     if _supabase_client is None:
@@ -311,6 +327,61 @@ def check_for_updates(store_filter=None):
     logger.info(f"[{run_id}] Starting update check.")
     insert_run_log(run_id)
 
+    def canonicalize_items_by_link(items, stores_by_link):
+        """Return exactly one canonical row per unique item `link`."""
+        items_by_link = {}
+        for item in items:
+            link = item.get("link")
+            if not link:
+                continue
+            items_by_link.setdefault(link, []).append(item)
+
+        def store_rank(store_name):
+            return STORE_PRECEDENCE.get(store_name, 10_000)
+
+        canonical = []
+        for link, rows in items_by_link.items():
+            stores = stores_by_link.get(link, set())
+            canonical_store = min(stores, key=store_rank) if stores else rows[0].get("store")
+
+            # Canonical in-stock = if it appears in-stock anywhere in the scraped set.
+            canonical_in_stock = any(bool(r.get("in_stock")) for r in rows)
+
+            # Deterministically pick name/price from the lowest-precedence store that has real values.
+            sorted_rows = sorted(rows, key=lambda r: store_rank(r.get("store")))
+
+            canonical_price = next(
+                (
+                    r.get("price")
+                    for r in sorted_rows
+                    if r.get("price") and r.get("price") != PRICE_PLACEHOLDER
+                ),
+                None,
+            )
+            canonical_name = next(
+                (
+                    r.get("name")
+                    for r in sorted_rows
+                    if r.get("name") and r.get("name") != NAME_PLACEHOLDER
+                ),
+                None,
+            )
+
+            if canonical_price is None:
+                canonical_price = rows[0].get("price")
+            if canonical_name is None:
+                canonical_name = rows[0].get("name")
+
+            canonical.append({
+                "name": canonical_name,
+                "price": canonical_price,
+                "store": canonical_store,
+                "link": link,
+                "in_stock": canonical_in_stock,
+            })
+
+        return canonical
+
     is_seed_mode = run_mode == 'seed'
     if is_seed_mode:
         logger.info(f"[{run_id}] SEED_MODE active (run_mode=seed). Scraping + baseline upsert only.")
@@ -351,22 +422,34 @@ def check_for_updates(store_filter=None):
         )
         return
 
+    # Preserve multi-store membership for noisy cases where the same `link` appears
+    # under multiple Broken Binding collections in the same run.
+    stores_by_link = {}
+    for item in new_items:
+        link = item.get("link")
+        store = item.get("store")
+        if not link or not store:
+            continue
+        stores_by_link.setdefault(link, set()).add(store)
+
+    new_items_canonical = canonicalize_items_by_link(new_items, stores_by_link)
+
     # Seed mode: establish baseline catalog + daily snapshots, but do not generate events.
     if is_seed_mode:
-        for item in new_items:
+        for item in new_items_canonical:
             item["typed_price_cents"] = parse_price_cents(item.get("price"))
 
-        save_seen_items(new_items, run_id)
+        save_seen_items(new_items_canonical, run_id)
 
-        all_links = [item["link"] for item in new_items]
+        all_links = [item["link"] for item in new_items_canonical]
         all_link_to_id = fetch_item_ids_by_link(all_links, run_id)
 
         # Daily snapshots are idempotent per day via unique(snapshot_date, item_id).
-        insert_daily_snapshots(new_items, all_link_to_id, run_id)
+        insert_daily_snapshots(new_items_canonical, all_link_to_id, run_id)
 
         update_run_log(
             run_id,
-            items_scraped=len(new_items),
+            items_scraped=len(new_items_canonical),
             events_created=0,
             emails_attempted=0,
             emails_sent=0,
@@ -376,7 +459,7 @@ def check_for_updates(store_filter=None):
         return
 
     seen_set = {frozenset(s.items()) for s in seen_items}
-    new_set = {frozenset(n.items()) for n in new_items}
+    new_set = {frozenset(n.items()) for n in new_items_canonical}
     unseen_items_set = new_set.difference(seen_set)
     unseen_items = [dict(x) for x in unseen_items_set]
 
@@ -435,18 +518,18 @@ def check_for_updates(store_filter=None):
     logger.info(f"[{run_id}] Found {len(unseen_items)} changed items, {len(events)} events.")
 
     # Attach typed_price_cents before upserting
-    for item in new_items:
+    for item in new_items_canonical:
         item["typed_price_cents"] = parse_price_cents(item.get("price"))
 
     # Step 1: Upsert items_seen so IDs exist for new items
-    save_seen_items(new_items, run_id)
+    save_seen_items(new_items_canonical, run_id)
 
     # Step 2: Fetch IDs for ALL items (needed for daily snapshots + changed-item events)
-    all_links = [item["link"] for item in new_items]
+    all_links = [item["link"] for item in new_items_canonical]
     all_link_to_id = fetch_item_ids_by_link(all_links, run_id)
 
     # Step 3: Insert daily snapshots (idempotent per day)
-    insert_daily_snapshots(new_items, all_link_to_id, run_id)
+    insert_daily_snapshots(new_items_canonical, all_link_to_id, run_id)
 
     # Step 4: Fetch IDs for changed items only (subset for event building)
     link_to_id = {link: all_link_to_id[link] for link in {e["link"] for e in events} if link in all_link_to_id}
@@ -473,12 +556,12 @@ def check_for_updates(store_filter=None):
 
     if not recipients:
         logger.info(f"[{run_id}] No recipients found; skipping email send.")
-        update_run_log(run_id, items_scraped=len(new_items), events_created=len(inserted_events),
+        update_run_log(run_id, items_scraped=len(new_items_canonical), events_created=len(inserted_events),
                        emails_attempted=0, emails_sent=0, status="success")
         return
     if not items_to_email:
         logger.info(f"[{run_id}] No in-stock items to email; skipping email send.")
-        update_run_log(run_id, items_scraped=len(new_items), events_created=len(inserted_events),
+        update_run_log(run_id, items_scraped=len(new_items_canonical), events_created=len(inserted_events),
                        emails_attempted=0, emails_sent=0, status="success")
         return
 
@@ -498,7 +581,7 @@ def check_for_updates(store_filter=None):
         if enabled_stores is not None:
             recip_items = [
                 i for i in items_to_email
-                if i.get("store") in enabled_stores
+                if stores_by_link.get(i["link"], set()).intersection(enabled_stores)
                 or link_to_id.get(i["link"]) in watched_item_ids
             ]
         else:
@@ -561,7 +644,7 @@ def check_for_updates(store_filter=None):
     # Step 9: Finalize run_log
     update_run_log(
         run_id,
-        items_scraped=len(new_items),
+        items_scraped=len(new_items_canonical),
         events_created=len(inserted_events),
         emails_attempted=len(email_results),
         emails_sent=sent_count,
