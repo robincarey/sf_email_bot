@@ -1,38 +1,25 @@
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import boto3
 from dotenv import load_dotenv
 import os
 
 load_dotenv()
 
-# Grab credentials from environmental vars
-SF_EMAIL_USERNAME = os.getenv("SF_EMAIL_USERNAME")
-SF_EMAIL_PASSWORD = os.getenv("SF_EMAIL_PASSWORD")
+ses_client = boto3.client('ses', region_name=os.environ['AWS_SES_REGION'])
+SES_FROM_ADDRESS = os.environ['SES_FROM_ADDRESS']
 
 def send_email(subject, body, to_email, is_html=True):
-    from_email = SF_EMAIL_USERNAME
-    password = SF_EMAIL_PASSWORD
-
-    # Email setup
-    msg = MIMEMultipart()
-    msg['From'] = from_email
-    msg['To'] = to_email
-    msg['Subject'] = subject
-
-    # Attach the email body
-    if is_html:
-        msg.attach(MIMEText(body, 'html'))  # Send HTML content
-    else:
-        msg.attach(MIMEText(body, 'plain'))  # Send plain text content
-
-    # Sending email
+    body_type = 'Html' if is_html else 'Text'
     try:
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(from_email, password)
-        server.sendmail(from_email, to_email, msg.as_string())
-        server.close()
+        ses_client.send_email(
+            Source=SES_FROM_ADDRESS,
+            Destination={'ToAddresses': [to_email]},
+            Message={
+                'Subject': {'Data': subject, 'Charset': 'UTF-8'},
+                'Body': {
+                    body_type: {'Data': body, 'Charset': 'UTF-8'}
+                }
+            }
+        )
     except Exception as e:
         print(f"Failed to send email: {e}")
 

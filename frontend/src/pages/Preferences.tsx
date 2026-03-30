@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import StoreToggle from '../components/StoreToggle'
@@ -11,10 +12,13 @@ interface StorePreference {
 
 export default function Preferences() {
   const { user } = useAuth()
+  const [searchParams] = useSearchParams()
   const [pauseAll, setPauseAll] = useState(false)
   const [stores, setStores] = useState<StorePreference[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [showUnsubscribeBanner, setShowUnsubscribeBanner] = useState(false)
+  const pauseAllRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!user) return
@@ -43,6 +47,20 @@ export default function Preferences() {
 
     load()
   }, [user])
+
+  useEffect(() => {
+    if (searchParams.get('unsubscribe') !== 'true') return
+
+    setShowUnsubscribeBanner(true)
+    const timerId = window.setTimeout(() => {
+      pauseAllRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
+    }, 100)
+
+    return () => window.clearTimeout(timerId)
+  }, [searchParams])
 
   const togglePauseAll = async () => {
     const next = !pauseAll
@@ -78,6 +96,23 @@ export default function Preferences() {
 
   return (
     <div className="space-y-6">
+      {showUnsubscribeBanner && (
+        <div className="rounded-xl border border-brand bg-brand/10 p-4 text-sm text-text">
+          <div className="flex items-start justify-between gap-3">
+            <p>
+              You can manage your notification preferences below, or pause all alerts using the toggle at the bottom.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowUnsubscribeBanner(false)}
+              className="text-text-muted transition-colors hover:text-text"
+              aria-label="Dismiss notification preferences banner"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
       <div>
         <h2 className="text-lg font-semibold text-text">Preferences</h2>
         <p className="text-sm text-text-muted mt-1">
@@ -89,7 +124,10 @@ export default function Preferences() {
       </div>
 
       {/* Pause all */}
-      <div className="rounded-xl bg-surface border border-border p-6 shadow-sm">
+      <div
+        ref={pauseAllRef}
+        className="rounded-xl bg-surface border border-border p-6 shadow-sm"
+      >
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-sm font-semibold text-text">Pause all alerts</h3>

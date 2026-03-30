@@ -10,6 +10,7 @@ import Preferences from './pages/Preferences'
 import Account from './pages/Account'
 import Contact from './pages/Contact'
 import Items from './pages/Items'
+import Privacy from './pages/Privacy'
 
 export default function App() {
   return (
@@ -29,6 +30,7 @@ export default function App() {
               <Route path="items" element={<Items />} />
               <Route path="preferences" element={<Preferences />} />
               <Route path="contact" element={<Contact />} />
+              <Route path="privacy" element={<Privacy />} />
               <Route path="account" element={<Account />} />
             </Route>
           </Routes>
