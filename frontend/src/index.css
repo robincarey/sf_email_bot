@@ -21,3 +21,15 @@
   --color-text: #fafaf9;
   --color-text-muted: #a8a29e;
 }
+
+html {
+  min-height: 100%;
+  background-color: var(--color-surface-alt);
+  overscroll-behavior-y: none;
+}
+
+body {
+  min-height: 100%;
+  background-color: var(--color-surface-alt);
+  overscroll-behavior-y: none;
+}

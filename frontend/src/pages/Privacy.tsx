@@ -524,5 +524,9 @@ export default function Privacy() {
     )
   }
 
-  return <PrivacyContent />
+  return (
+    <div className="min-h-screen bg-surface-alt">
+      <PrivacyContent />
+    </div>
+  )
 }

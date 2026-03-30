@@ -500,5 +500,9 @@ export default function Terms() {
     )
   }
 
-  return <TermsContent />
+  return (
+    <div className="min-h-screen bg-surface-alt">
+      <TermsContent />
+    </div>
+  )
 }
