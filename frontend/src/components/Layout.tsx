@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 
@@ -6,7 +6,6 @@ const navItems = [
   { to: '/app', label: 'Dashboard', end: true },
   { to: '/app/items', label: 'Items' },
   { to: '/app/preferences', label: 'Preferences' },
-  { to: '/privacy', label: 'Privacy' },
   { to: '/app/contact', label: 'Contact' },
   { to: '/app/account', label: 'Account' },
 ] as const
@@ -29,11 +28,11 @@ function ThemeToggle() {
   )
 }
 
-export default function Layout() {
+export default function Layout({ children }: { children?: React.ReactNode }) {
   const { user, signOut } = useAuth()
 
   return (
-    <div className="min-h-screen bg-surface-alt">
+    <div className="min-h-screen bg-surface-alt flex flex-col">
       <header className="bg-surface border-b border-border">
         <div className="mx-auto max-w-5xl px-4 sm:px-6">
           {/* Top row: branding + user controls */}
@@ -79,9 +78,20 @@ export default function Layout() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-        <Outlet />
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">
+        {children ?? <Outlet />}
       </main>
+
+      <footer className="border-t border-border bg-surface py-3">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 flex justify-center sm:justify-end">
+          <Link
+            to="/privacy"
+            className="text-xs text-text-muted hover:text-text transition-colors"
+          >
+            Privacy Policy
+          </Link>
+        </div>
+      </footer>
     </div>
   )
 }

@@ -169,7 +169,7 @@ export default function Preferences() {
       <div className="rounded-xl bg-surface border border-border p-6 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-text">Product announcements</h3>
+            <h3 className="text-sm font-semibold text-text">SFF Stock Alerts feature announcements</h3>
             <p className="text-sm text-text-muted mt-0.5">
               Receive occasional service updates and feature announcements
             </p>

@@ -1,6 +1,13 @@
-export default function Privacy() {
+import { useAuth } from '../context/AuthContext'
+import Layout from '../components/Layout'
+
+export function PrivacyContent({ embedded = false }: { embedded?: boolean }) {
   return (
-    <div className="max-w-3xl mx-auto px-6 py-12 text-sm text-gray-700 leading-relaxed">
+    <div
+      className={`max-w-3xl mx-auto text-sm text-gray-700 leading-relaxed ${
+        embedded ? 'px-0 py-2' : 'px-6 py-12'
+      }`}
+    >
       <h1 className="text-3xl font-bold text-gray-900 mb-2">Privacy Policy</h1>
       <p className="text-gray-500 mb-10">Last updated March 30, 2026</p>
 
@@ -493,5 +500,27 @@ export default function Privacy() {
         .
       </p>
     </div>
-  );
+  )
+}
+
+export default function Privacy() {
+  const { user, loading } = useAuth()
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-surface-alt">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand border-t-transparent" />
+      </div>
+    )
+  }
+
+  if (user) {
+    return (
+      <Layout>
+        <PrivacyContent embedded />
+      </Layout>
+    )
+  }
+
+  return <PrivacyContent />
 }
