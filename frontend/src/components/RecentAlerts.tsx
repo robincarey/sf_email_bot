@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import { eventBadgeColors, formatRelativeTime } from '../lib/eventUtils'
 
 interface ItemInfo {
   name: string
@@ -18,15 +19,6 @@ interface AlertEvent {
   old_value: string | null
   new_value: string | null
   items_seen: ItemInfo | ItemInfo[] | null
-}
-
-const eventBadgeColors: Record<string, string> = {
-  'New Item': 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
-  'Restocked': 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
-  'Price Change': 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
-  'Store Change': 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
-  'Out of Stock': 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
-  'New Item - Out of Stock': 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
 }
 
 interface RecentAlertsProps {
@@ -193,17 +185,4 @@ export default function RecentAlerts({ onWatchlistChange }: RecentAlertsProps) {
       </table>
     </div>
   )
-}
-
-function formatRelativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const minutes = Math.floor(diff / 60_000)
-  if (minutes < 1) return 'Just now'
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  if (days === 1) return 'Yesterday'
-  if (days < 7) return `${days}d ago`
-  return new Date(iso).toLocaleDateString()
 }

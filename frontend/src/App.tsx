@@ -10,23 +10,13 @@ import Preferences from './pages/Preferences'
 import Account from './pages/Account'
 import Contact from './pages/Contact'
 import Items from './pages/Items'
+import Landing from './pages/Landing'
 import Privacy from './pages/Privacy'
 import Terms from './pages/Terms'
 
 function RedirectWithSearch({ to }: { to: string }) {
   const { search } = useLocation()
   return <Navigate to={`${to}${search}`} replace />
-}
-
-/** Preserves hash/query so Supabase magic-link tokens on `/` are not stripped when sending users to `/app`. */
-function RootToApp() {
-  const { search, hash } = useLocation()
-  return (
-    <Navigate
-      to={{ pathname: '/app', search, hash }}
-      replace
-    />
-  )
 }
 
 export default function App() {
@@ -56,7 +46,7 @@ export default function App() {
               <Route path="contact" element={<Contact />} />
               <Route path="account" element={<Account />} />
             </Route>
-            <Route path="/" element={<RootToApp />} />
+            <Route path="/" element={<Landing />} />
           </Routes>
           <Analytics />
         </AuthProvider>
