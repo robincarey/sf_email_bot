@@ -83,6 +83,17 @@ def broken_binding_checks():
                             continue
 
                         link = "https://thebrokenbindingsub.com" + href
+                        # Check for subscriber-gated products before fetching HTML
+                        try:
+                            json_response = _get_with_retry(session, link + ".json")
+                            product_data = json_response.json()
+                            tags = [t.strip() for t in product_data["product"]["tags"].split(",")]
+                            if "Private Sale" in tags:
+                                logger.info(f"Skipping private sale product: {product_name}")
+                                continue
+                        except requests.RequestException as e:
+                            logger.warning(f"Could not fetch product JSON for {link}, proceeding anyway: {e}")
+
                         try:
                             product_response = _get_with_retry(session, link)
                         except requests.RequestException as e:
