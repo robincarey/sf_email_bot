@@ -13,6 +13,7 @@ import Items from './pages/Items'
 import Landing from './pages/Landing'
 import Privacy from './pages/Privacy'
 import Terms from './pages/Terms'
+import AnalyticsPage from './pages/Analytics'
 
 function RedirectWithSearch({ to }: { to: string }) {
   const { search } = useLocation()
@@ -32,6 +33,7 @@ export default function App() {
             <Route path="/preferences" element={<RedirectWithSearch to="/app/preferences" />} />
             <Route path="/contact" element={<RedirectWithSearch to="/app/contact" />} />
             <Route path="/account" element={<RedirectWithSearch to="/app/account" />} />
+            <Route path="/analytics" element={<RedirectWithSearch to="/app/analytics" />} />
             <Route
               path="/app"
               element={
@@ -45,6 +47,7 @@ export default function App() {
               <Route path="preferences" element={<Preferences />} />
               <Route path="contact" element={<Contact />} />
               <Route path="account" element={<Account />} />
+              <Route path="analytics" element={<AnalyticsPage />} />
             </Route>
             <Route path="/" element={<Landing />} />
           </Routes>

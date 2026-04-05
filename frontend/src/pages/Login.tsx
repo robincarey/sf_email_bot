@@ -3,10 +3,16 @@ import { Link, Navigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 
+/** Only allow in-app paths so magic-link ?next= is not an open redirect. */
+function safeNextParam(raw: string | null): string {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return '/app'
+  return raw
+}
+
 export default function Login() {
   const { user, loading } = useAuth()
   const location = useLocation()
-  const next = new URLSearchParams(location.search).get('next') || '/app'
+  const next = safeNextParam(new URLSearchParams(location.search).get('next'))
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -29,9 +35,14 @@ export default function Login() {
     setError(null)
     setSubmitting(true)
 
+    // Redirect to /login (not /app) so tokens (?code= or #access_token) are not
+    // stripped by ProtectedRoute navigating away before getSession() finishes.
+    const redirectUrl = new URL('/login', window.location.origin)
+    redirectUrl.searchParams.set('next', next)
+
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/app` },
+      options: { emailRedirectTo: redirectUrl.toString() },
     })
 
     setSubmitting(false)
