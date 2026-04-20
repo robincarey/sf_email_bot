@@ -30,8 +30,9 @@ A **frontend dashboard** (Vite + React) lets users sign up, manage per-store ale
 ```
 EventBridge (schedule)
   └─ Lambda (lambda_function.py)
-       ├─ broken_binding_sf.py   — scrapes Broken Binding collections
-       ├─ folio_society_sf.py   — scrapes Folio Society Sci-Fi & Fantasy listing
+       ├─ scrapers/
+       │    ├─ broken_binding_sf.py   — scrapes Broken Binding collections
+       │    └─ folio_society_sf.py    — scrapes Folio Society Sci-Fi & Fantasy listing
        ├─ email_notifier.py     — sends email via Amazon SES
        └─ Supabase (PostgreSQL)
             ├─ profiles                — user accounts (linked to Supabase Auth)
@@ -137,7 +138,7 @@ npm run dev
 
 ```bash
 source venv/bin/activate
-python -m unittest test_lambda_function -v
+python -m unittest discover tests -v
 ```
 
 ## Deployment
@@ -147,7 +148,7 @@ python -m unittest test_lambda_function -v
 Pushes to `main` trigger the GitHub Actions workflow (`.github/workflows/lambda_deployment.yml`), which:
 
 1. Builds the Lambda package in a Docker container matching the Lambda Python 3.11 runtime
-2. Zips the artifact (including `folio_society_sf.py` and SES-backed `email_notifier.py`)
+2. Zips the artifact (including the `scrapers/` package and SES-backed `email_notifier.py`)
 3. Deploys to the `sf_bot` Lambda function via `aws lambda update-function-code`
 
 Required GitHub Actions secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`.

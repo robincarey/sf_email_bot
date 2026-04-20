@@ -5,7 +5,7 @@ import time
 import requests
 from bs4 import BeautifulSoup
 
-from broken_binding_sf import _get_with_retry
+from .broken_binding_sf import _get_with_retry
 
 logger = logging.getLogger(__name__)
 

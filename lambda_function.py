@@ -6,8 +6,8 @@ import logging
 import argparse
 from datetime import datetime, timezone
 from supabase import create_client
-from broken_binding_sf import broken_binding_checks
-from folio_society_sf import folio_society_checks
+from scrapers.broken_binding_sf import broken_binding_checks
+from scrapers.folio_society_sf import folio_society_checks
 from email_notifier import send_email
 
 logger = logging.getLogger()

@@ -8,6 +8,7 @@ on:
       - 'frontend/**'
       - 'scripts/**'
       - 'supabase/**'
+      - 'tests/**'
       - 'README.md'
 
 jobs:
@@ -40,10 +41,9 @@ jobs:
               python -m pip install --upgrade pip setuptools wheel &&
               pip install -r requirements.txt -t build/ &&
               cp lambda_function.py build/ &&
-              cp broken_binding_sf.py build/ &&
-              cp folio_society_sf.py build/ &&
               cp email_notifier.py build/ &&
               cp engagement_lambda.py build/ &&
+              cp -r scrapers build/scrapers &&
               PYTHONPATH=build python -c 'import supabase, pydantic_core, requests, bs4; print(\"imports ok\")'
             "
 
