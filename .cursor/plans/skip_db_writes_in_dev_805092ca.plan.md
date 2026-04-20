@@ -4,10 +4,10 @@ overview: Guard all database write operations in `check_for_updates()` behind a 
 todos:
   - id: add-dry-run-flag
     content: Add `dry_run` flag and log line at the top of `check_for_updates()`
-    status: pending
+    status: completed
   - id: guard-writes
     content: Wrap all 7 DB write call sites with `if not dry_run:` guards, using `[]` fallback for `insert_events`
-    status: pending
+    status: completed
 isProject: false
 ---
 

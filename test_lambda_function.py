@@ -31,6 +31,12 @@ class TestParsePriceCents(unittest.TestCase):
 
 class TestGetRecipientsForRun(unittest.TestCase):
 
+    def setUp(self):
+        self._orig_run_mode = lf.run_mode
+
+    def tearDown(self):
+        lf.run_mode = self._orig_run_mode
+
     @patch.object(lf, "get_supabase")
     def test_prod_mode_returns_id_and_email(self, mock_get_sb):
         lf.run_mode = "prod"
@@ -101,8 +107,11 @@ class TestLoadSeenItems(unittest.TestCase):
 
 class TestCheckForUpdates(unittest.TestCase):
 
-    def _patch_all(self):
+    def _patch_all(self, run_mode="prod"):
         """Return a dict of active mocks for every external dependency."""
+        self._orig_run_mode = lf.run_mode
+        lf.run_mode = run_mode
+        self.addCleanup(setattr, lf, "run_mode", self._orig_run_mode)
         patchers = {
             "get_recipients_for_run": patch.object(lf, "get_recipients_for_run"),
             "get_store_preferences_for_users": patch.object(lf, "get_store_preferences_for_users"),
@@ -448,6 +457,28 @@ class TestCheckForUpdates(unittest.TestCase):
         junction_rows = m["insert_email_log_events"].call_args[0][0]
         self.assertEqual(len(junction_rows), 2)
         self.assertEqual({r["email_log_id"] for r in junction_rows}, {50, 51})
+
+    def test_dev_mode_skips_all_db_writes_but_sends_email(self):
+        m = self._patch_all(run_mode="dev")
+        m["get_recipients_for_run"].return_value = [self._recip("dev@test.com", "uid-dev")]
+        m["load_seen_items"].return_value = [
+            {"name": "Book A", "price": "$10", "store": "UK", "link": "https://a", "in_stock": False},
+        ]
+        m["broken_binding_checks"].return_value = [
+            {"name": "Book A", "price": "$10", "store": "UK", "link": "https://a", "in_stock": True},
+        ]
+        m["fetch_item_ids_by_link"].return_value = {"https://a": 1}
+
+        lf.check_for_updates()
+
+        m["send_email"].assert_called_once()
+        m["save_seen_items"].assert_not_called()
+        m["insert_events"].assert_not_called()
+        m["insert_daily_snapshots"].assert_not_called()
+        m["insert_email_log"].assert_not_called()
+        m["insert_email_log_events"].assert_not_called()
+        m["insert_run_log"].assert_not_called()
+        m["update_run_log"].assert_not_called()
 
 
 if __name__ == "__main__":

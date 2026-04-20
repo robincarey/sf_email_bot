@@ -324,8 +324,10 @@ def _build_email_table(items):
 
 def check_for_updates(store_filter=None):
     run_id = str(uuid.uuid4())
-    logger.info(f"[{run_id}] Starting update check.")
-    insert_run_log(run_id)
+    dry_run = run_mode == 'dev'
+    logger.info(f"[{run_id}] Starting update check (dry_run={dry_run}).")
+    if not dry_run:
+        insert_run_log(run_id)
 
     def canonicalize_items_by_link(items, stores_by_link):
         """Return exactly one canonical row per unique item `link`."""
@@ -412,14 +414,15 @@ def check_for_updates(store_filter=None):
 
     if not new_items:
         logger.warning(f"[{run_id}] Scraper returned no items; skipping diff and upsert.")
-        update_run_log(
-            run_id,
-            items_scraped=0,
-            events_created=0,
-            emails_attempted=0,
-            emails_sent=0,
-            status="seed" if is_seed_mode else "empty_scrape",
-        )
+        if not dry_run:
+            update_run_log(
+                run_id,
+                items_scraped=0,
+                events_created=0,
+                emails_attempted=0,
+                emails_sent=0,
+                status="seed" if is_seed_mode else "empty_scrape",
+            )
         return
 
     # Preserve multi-store membership for noisy cases where the same `link` appears
@@ -521,15 +524,17 @@ def check_for_updates(store_filter=None):
     for item in new_items_canonical:
         item["typed_price_cents"] = parse_price_cents(item.get("price"))
 
-    # Step 1: Upsert items_seen so IDs exist for new items
-    save_seen_items(new_items_canonical, run_id)
+    if not dry_run:
+        # Step 1: Upsert items_seen so IDs exist for new items
+        save_seen_items(new_items_canonical, run_id)
 
     # Step 2: Fetch IDs for ALL items (needed for daily snapshots + changed-item events)
     all_links = [item["link"] for item in new_items_canonical]
     all_link_to_id = fetch_item_ids_by_link(all_links, run_id)
 
-    # Step 3: Insert daily snapshots (idempotent per day)
-    insert_daily_snapshots(new_items_canonical, all_link_to_id, run_id)
+    if not dry_run:
+        # Step 3: Insert daily snapshots (idempotent per day)
+        insert_daily_snapshots(new_items_canonical, all_link_to_id, run_id)
 
     # Step 4: Fetch IDs for changed items only (subset for event building)
     link_to_id = {link: all_link_to_id[link] for link in {e["link"] for e in events} if link in all_link_to_id}
@@ -549,19 +554,21 @@ def check_for_updates(store_filter=None):
             "store": e.get("store"),
             "in_stock": e.get("in_stock"),
         })
-    inserted_events = insert_events(event_rows, run_id)
+    inserted_events = insert_events(event_rows, run_id) if not dry_run else []
 
     # Step 6: Send emails for in-stock items only, filtered by store prefs
     items_to_email = [i for i in unseen_items if i.get("in_stock")]
 
     if not recipients:
         logger.info(f"[{run_id}] No recipients found; skipping email send.")
-        update_run_log(run_id, items_scraped=len(new_items_canonical), events_created=len(inserted_events),
-                       emails_attempted=0, emails_sent=0, status="success")
+        if not dry_run:
+            update_run_log(run_id, items_scraped=len(new_items_canonical), events_created=len(inserted_events),
+                           emails_attempted=0, emails_sent=0, status="success")
         return
     if not items_to_email:
         logger.info(f"[{run_id}] No in-stock items to email; skipping email send.")
-        update_run_log(run_id, items_scraped=len(new_items_canonical), events_created=len(inserted_events),
+        if not dry_run:
+            update_run_log(run_id, items_scraped=len(new_items_canonical), events_created=len(inserted_events),
                        emails_attempted=0, emails_sent=0, status="success")
         return
 
@@ -622,37 +629,38 @@ def check_for_updates(store_filter=None):
     sent_count = sum(1 for r in email_results if r["success"])
     logger.info(f"[{run_id}] Emails sent: {sent_count}/{len(email_results)}.")
 
-    # Step 7: Batch insert email_log rows
-    log_rows = [{
-        "user_id": r["user_id"],
-        "run_id": run_id,
-        "subject": email_subject,
-        "success": r["success"],
-        "error_message": r["error_message"],
-        "ses_message_id": r.get("ses_message_id"),
-    } for r in email_results]
-    inserted_logs = insert_email_log(log_rows, run_id)
+    if not dry_run:
+        # Step 7: Batch insert email_log rows
+        log_rows = [{
+            "user_id": r["user_id"],
+            "run_id": run_id,
+            "subject": email_subject,
+            "success": r["success"],
+            "error_message": r["error_message"],
+            "ses_message_id": r.get("ses_message_id"),
+        } for r in email_results]
+        inserted_logs = insert_email_log(log_rows, run_id)
 
-    # Step 8: Insert email_log_events junction rows
-    log_idx_to_event_ids = {i: r["event_ids"] for i, r in enumerate(email_results)}
-    junction_rows = []
-    for i, log_row in enumerate(inserted_logs):
-        for event_id in log_idx_to_event_ids.get(i, []):
-            junction_rows.append({
-                "email_log_id": log_row["id"],
-                "event_id": event_id,
-            })
-    insert_email_log_events(junction_rows, run_id)
+        # Step 8: Insert email_log_events junction rows
+        log_idx_to_event_ids = {i: r["event_ids"] for i, r in enumerate(email_results)}
+        junction_rows = []
+        for i, log_row in enumerate(inserted_logs):
+            for event_id in log_idx_to_event_ids.get(i, []):
+                junction_rows.append({
+                    "email_log_id": log_row["id"],
+                    "event_id": event_id,
+                })
+        insert_email_log_events(junction_rows, run_id)
 
-    # Step 9: Finalize run_log
-    update_run_log(
-        run_id,
-        items_scraped=len(new_items_canonical),
-        events_created=len(inserted_events),
-        emails_attempted=len(email_results),
-        emails_sent=sent_count,
-        status="success",
-    )
+        # Step 9: Finalize run_log
+        update_run_log(
+            run_id,
+            items_scraped=len(new_items_canonical),
+            events_created=len(inserted_events),
+            emails_attempted=len(email_results),
+            emails_sent=sent_count,
+            status="success",
+        )
     logger.info(f"[{run_id}] Update check complete.")
 
 
