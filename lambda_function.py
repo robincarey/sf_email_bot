@@ -605,16 +605,18 @@ def check_for_updates(store_filter=None):
     </html>
     """
         try:
-            send_email(email_subject, message, recip["email"])
+            recip_ses_message_id = send_email(email_subject, message, recip["email"])
             email_results.append({
                 "user_id": recip["id"], "success": True,
                 "error_message": None, "event_ids": recip_event_ids,
+                "ses_message_id": recip_ses_message_id,
             })
         except Exception as e:
             logger.error(f"[{run_id}] Failed to send email to {recip['email']}: {e}")
             email_results.append({
                 "user_id": recip["id"], "success": False,
                 "error_message": str(e), "event_ids": recip_event_ids,
+                "ses_message_id": None,
             })
 
     sent_count = sum(1 for r in email_results if r["success"])
@@ -627,6 +629,7 @@ def check_for_updates(store_filter=None):
         "subject": email_subject,
         "success": r["success"],
         "error_message": r["error_message"],
+        "ses_message_id": r.get("ses_message_id"),
     } for r in email_results]
     inserted_logs = insert_email_log(log_rows, run_id)
 

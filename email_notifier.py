@@ -10,7 +10,7 @@ SES_FROM_ADDRESS = os.environ['SES_FROM_ADDRESS']
 def send_email(subject, body, to_email, is_html=True):
     body_type = 'Html' if is_html else 'Text'
     try:
-        ses_client.send_email(
+        response = ses_client.send_email(
             Source=SES_FROM_ADDRESS,
             Destination={'ToAddresses': [to_email]},
             Message={
@@ -18,10 +18,13 @@ def send_email(subject, body, to_email, is_html=True):
                 'Body': {
                     body_type: {'Data': body, 'Charset': 'UTF-8'}
                 }
-            }
+            },
+            ConfigurationSetName=os.environ['SES_CONFIGURATION_SET']
         )
+        return response['MessageId']  # return it so the caller can store it
     except Exception as e:
         print(f"Failed to send email: {e}")
+        return None
 
 if __name__ == "__main__":
     # Example usage

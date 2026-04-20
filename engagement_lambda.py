@@ -1,0 +1,39 @@
+import json
+import os
+from supabase import create_client
+
+supabase = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
+
+def handler(event, context):
+    for record in event['Records']:
+        message = json.loads(record['Sns']['Message'])
+        event_type = message['eventType'].lower()  # 'click', 'open', 'send'
+
+        if event_type not in ('click', 'open'):
+            return  # ignore sends at this stage
+
+        ses_message_id = message['mail']['messageId']
+        event_timestamp = message['mail']['timestamp']
+
+        # resolve email_log_id and user_id from ses_message_id
+        log_row = supabase.table('email_log') \
+            .select('id, user_id') \
+            .eq('ses_message_id', ses_message_id) \
+            .single() \
+            .execute()
+
+        email_log_id = log_row.data['id'] if log_row.data else None
+        user_id = log_row.data['user_id'] if log_row.data else None
+
+        url_clicked = None
+        if event_type == 'click':
+            url_clicked = message['click']['link']
+
+        supabase.table('email_engagement_events').insert({
+            'ses_message_id': ses_message_id,
+            'email_log_id': email_log_id,
+            'user_id': user_id,
+            'event_type': event_type,
+            'event_timestamp': event_timestamp,
+            'url_clicked': url_clicked
+        }).execute()

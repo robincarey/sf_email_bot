@@ -119,14 +119,30 @@ class TestCheckForUpdates(unittest.TestCase):
             "update_run_log": patch.object(lf, "update_run_log"),
             "insert_daily_snapshots": patch.object(lf, "insert_daily_snapshots"),
         }
+        store_checks_patcher = patch.dict(
+            lf.STORE_CHECKS,
+            {
+                "Broken Binding": MagicMock(name="broken_binding_checks_mock"),
+                "Folio Society - Sci-Fi & Fantasy": MagicMock(name="folio_society_checks_mock"),
+            },
+            clear=True,
+        )
         mocks = {}
         for name, p in patchers.items():
             mocks[name] = p.start()
             self.addCleanup(p.stop)
+        store_checks_patcher.start()
+        self.addCleanup(store_checks_patcher.stop)
+        mocks["store_checks"] = lf.STORE_CHECKS
+        # Backward compatibility for existing tests that set
+        # m["broken_binding_checks"].return_value.
+        mocks["broken_binding_checks"] = mocks["store_checks"]["Broken Binding"]
         mocks["insert_events"].return_value = []
         mocks["insert_email_log"].return_value = []
         mocks["get_store_preferences_for_users"].return_value = {}
         mocks["get_watchlist_for_users"].return_value = {}
+        mocks["store_checks"]["Broken Binding"].return_value = []
+        mocks["store_checks"]["Folio Society - Sci-Fi & Fantasy"].return_value = []
         return mocks
 
     def _recip(self, email, uid=None):
