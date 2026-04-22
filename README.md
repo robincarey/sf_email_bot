@@ -50,6 +50,29 @@ Vercel (frontend/)
        └─ Supabase JS client (anon key + RLS)
 ```
 
+## Data architecture (Bronze/Silver/Gold)
+
+This project uses a medallion-style data model to separate raw ingest from normalized
+entities and analytics-ready views.
+
+- **Bronze**: raw operational ingest (`items_seen`, `item_events`)
+- **Silver**: normalized catalog layer (`publishers`, `collections`, `works`, `editions`,
+  `retailer_listings`)
+- **Gold**: product and analytics marts (publisher-level limits, title-level engagement,
+  cross-collection deduplicated demand metrics)
+
+Design goals:
+
+- Preserve raw scrape fidelity while enabling canonical joins for product features
+- Use deterministic normalization keys for title and URL matching
+- Enforce schema-level data contracts (uniqueness keys, foreign keys)
+- Keep migrations safe for live users through idempotent backfills and staged cutover
+
+See:
+
+- `docs/architecture/erd.md` for canonical entity relationships
+- `docs/architecture/normalization-layer.md` for migration, quality gates, and rollout
+
 ## Setup
 
 ### Prerequisites
