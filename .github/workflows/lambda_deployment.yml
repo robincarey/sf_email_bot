@@ -27,7 +27,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Build Lambda package in Lambda-compatible container
+      - name: Build main Lambda package in Lambda-compatible container
         run: |
           set -e
           rm -rf build lambda-deploy.zip
@@ -42,17 +42,40 @@ jobs:
               pip install -r requirements.txt -t build/ &&
               cp lambda_function.py build/ &&
               cp email_notifier.py build/ &&
-              cp engagement_lambda.py build/ &&
               cp -r scrapers build/scrapers &&
               PYTHONPATH=build python -c 'import supabase, pydantic_core, requests, bs4; print(\"imports ok\")'
             "
 
-      - name: Zip Lambda artifact
+      - name: Zip main Lambda artifact
         run: |
           cd build
           zip -r ../lambda-deploy.zip .
           cd ..
           ls -lh lambda-deploy.zip
+
+      - name: Build engagement Lambda package
+        run: |
+          set -e
+          rm -rf engagement-build engagement-deploy.zip
+          mkdir -p engagement-build
+
+          docker run --rm \
+            -v "$PWD":/var/task \
+            -w /var/task \
+            public.ecr.aws/sam/build-python3.11:latest \
+            /bin/bash -lc "
+              python -m pip install --upgrade pip setuptools wheel &&
+              pip install supabase -t engagement-build/ &&
+              cp engagement_lambda.py engagement-build/ &&
+              PYTHONPATH=engagement-build python -c 'import supabase, pydantic_core; print(\"engagement imports ok\")'
+            "
+
+      - name: Zip engagement Lambda artifact
+        run: |
+          cd engagement-build
+          zip -r ../engagement-deploy.zip .
+          cd ..
+          ls -lh engagement-deploy.zip
 
       - name: Deploy to sf_bot Lambda
         run: |
@@ -64,4 +87,4 @@ jobs:
         run: |
           aws lambda update-function-code \
             --function-name sff_stock_engagement \
-            --zip-file fileb://lambda-deploy.zip
+            --zip-file fileb://engagement-deploy.zip
