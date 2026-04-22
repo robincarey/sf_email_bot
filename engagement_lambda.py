@@ -34,6 +34,17 @@ def handler(event, context):
         url_clicked = None
         if event_type == 'click':
             url_clicked = message['click']['link']
+        
+        item_id = None
+        if url_clicked:
+            item = supabase.table('items_seen') \
+                .select('id') \
+                .eq('link', url_clicked) \
+                .maybe_single() \
+                .execute()
+
+            if item.data:
+                item_id = item.data['id']
 
         try:
             supabase.table('email_engagement_events').insert({
@@ -42,7 +53,8 @@ def handler(event, context):
                 'user_id': user_id,
                 'event_type': event_type,
                 'event_timestamp': event_timestamp,
-                'url_clicked': url_clicked
+                'url_clicked': url_clicked,
+                'item_id': item_id
             }).execute()
         except Exception as e:
             logger.error(f"Failed to insert engagement event for {ses_message_id}: {e}")
