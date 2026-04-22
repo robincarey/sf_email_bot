@@ -62,7 +62,7 @@ jobs:
           docker run --rm \
             -v "$PWD":/var/task \
             -w /var/task \
-            public.ecr.aws/sam/build-python3.11:latest \
+            public.ecr.aws/sam/build-python3.14:latest \
             /bin/bash -lc "
               python -m pip install --upgrade pip setuptools wheel &&
               pip install supabase -t engagement-build/ &&
