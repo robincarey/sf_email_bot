@@ -175,6 +175,107 @@ def save_seen_items(items, run_id):
         logger.error(f"[{run_id}] Error saving to Supabase: {e}")
 
 
+def upsert_retailer_listings(items, link_to_id, run_id):
+    """
+    Dual-write items into the Silver `retailer_listings` table alongside
+    `items_seen`. Resolves `collection_id` via `collections.store_name` and
+    `edition_id` via `(publisher_id, normalized_title)`.
+
+    Must never raise: any failure is logged and swallowed so the legacy
+    pipeline is not blocked. Rows missing a collection, edition, or
+    `items_seen_id` lineage are skipped with a warning.
+    """
+    if not items:
+        return
+
+    try:
+        cols_resp = (
+            get_supabase()
+            .table("collections")
+            .select("id, store_name, publisher_id")
+            .execute()
+        )
+        collection_map = {r["store_name"]: r for r in (cols_resp.data or [])}
+
+        eds_resp = (
+            get_supabase()
+            .table("editions")
+            .select("id, publisher_id, normalized_title")
+            .execute()
+        )
+        # Narrower key than the documented `editions` uniqueness
+        # `(work_id, publisher_id, normalized_title, coalesce(edition_type, ''))`,
+        # so a collision here means the lookup is ambiguous and callers should
+        # investigate rather than silently pick whichever row happens to win.
+        edition_map = {}
+        for r in (eds_resp.data or []):
+            key = (r["publisher_id"], r["normalized_title"])
+            if key in edition_map:
+                logger.warning(
+                    f"[{run_id}] Ambiguous edition lookup for publisher_id={key[0]} "
+                    f"normalized_title={key[1]!r}: editions {edition_map[key]} and {r['id']}."
+                )
+            edition_map[key] = r["id"]
+
+        rows = []
+        for item in items:
+            store = item.get("store")
+            link = item.get("link")
+            name = item.get("name")
+
+            if not store or not link or not name:
+                continue
+
+            collection = collection_map.get(store)
+            if not collection:
+                logger.warning(
+                    f"[{run_id}] No collection found for store '{store}'; "
+                    f"skipping retailer_listing."
+                )
+                continue
+
+            normalized = re.sub(r'[^a-z0-9]+', ' ', name.strip().lower()).strip()
+            edition_id = edition_map.get((collection["publisher_id"], normalized))
+            if not edition_id:
+                logger.warning(
+                    f"[{run_id}] No edition found for '{name}' "
+                    f"(publisher {collection['publisher_id']}); skipping retailer_listing."
+                )
+                continue
+
+            items_seen_id = link_to_id.get(link)
+            if not items_seen_id:
+                logger.warning(
+                    f"[{run_id}] No items_seen_id for link {link}; "
+                    f"skipping retailer_listing to preserve Bronze lineage."
+                )
+                continue
+
+            retailer_url_normalized = re.sub(r'/+$', '', link.split('?')[0].lower())
+
+            rows.append({
+                "edition_id": edition_id,
+                "collection_id": collection["id"],
+                "items_seen_id": items_seen_id,
+                "retailer_url": link,
+                "retailer_url_normalized": retailer_url_normalized,
+                "in_stock": item.get("in_stock"),
+                "price_cents": item.get("typed_price_cents"),
+                "last_checked": datetime.now(timezone.utc).isoformat(),
+            })
+
+        if rows:
+            get_supabase().table("retailer_listings").upsert(
+                rows, on_conflict="collection_id,retailer_url_normalized"
+            ).execute()
+            logger.info(f"[{run_id}] Upserted {len(rows)} rows into retailer_listings.")
+        else:
+            logger.warning(f"[{run_id}] No retailer_listing rows to upsert.")
+
+    except Exception as e:
+        logger.error(f"[{run_id}] Error upserting retailer_listings: {e}")
+
+
 def fetch_item_ids_by_link(links, run_id):
     if not links:
         return {}
@@ -533,7 +634,11 @@ def check_for_updates(store_filter=None):
     all_link_to_id = fetch_item_ids_by_link(all_links, run_id)
 
     if not dry_run:
-        # Step 3: Insert daily snapshots (idempotent per day)
+        # Step 3a: Silver dual-write into retailer_listings. Uses the same
+        # all_link_to_id map to populate the items_seen_id lineage column.
+        upsert_retailer_listings(new_items_canonical, all_link_to_id, run_id)
+
+        # Step 3b: Insert daily snapshots (idempotent per day)
         insert_daily_snapshots(new_items_canonical, all_link_to_id, run_id)
 
     # Step 4: Fetch IDs for changed items only (subset for event building)
