@@ -150,6 +150,7 @@ class TestCheckForUpdates(unittest.TestCase):
         patchers = {
             "get_recipients_for_run": patch.object(lf, "get_recipients_for_run"),
             "get_store_preferences_for_users": patch.object(lf, "get_store_preferences_for_users"),
+            "get_event_preferences_for_users": patch.object(lf, "get_event_preferences_for_users"),
             "get_watchlist_for_users": patch.object(lf, "get_watchlist_for_users"),
             "fetch_edition_ids_by_link": patch.object(lf, "fetch_edition_ids_by_link"),
             "load_catalog_state": patch.object(lf, "load_catalog_state"),
@@ -185,6 +186,7 @@ class TestCheckForUpdates(unittest.TestCase):
         mocks["insert_events"].return_value = []
         mocks["insert_email_log"].return_value = []
         mocks["get_store_preferences_for_users"].return_value = {}
+        mocks["get_event_preferences_for_users"].return_value = {}
         mocks["get_watchlist_for_users"].return_value = {}
         mocks["fetch_edition_ids_by_link"].return_value = {}
         mocks["store_checks"]["Broken Binding"].return_value = []
@@ -298,6 +300,25 @@ class TestCheckForUpdates(unittest.TestCase):
 
         event_rows = m["insert_events"].call_args[0][0]
         self.assertEqual(event_rows[0]["event_type"], "Price Change")
+        m["send_email"].assert_not_called()
+
+    def test_price_change_disabled_by_event_pref(self):
+        """Price change emails are skipped when the user disabled that event type."""
+        m = self._patch_all()
+        m["get_recipients_for_run"].return_value = [self._recip("a@test.com", "uid-a")]
+        m["load_catalog_state"].return_value = [
+            {"name": "Book A", "price": "$10", "store": "UK", "link": "https://a", "in_stock": True},
+        ]
+        m["broken_binding_checks"].return_value = [
+            {"name": "Book A", "price": "$12", "store": "UK", "link": "https://a", "in_stock": True},
+        ]
+        m["fetch_item_ids_by_link"].return_value = {"https://a": 1}
+        m["insert_events"].return_value = [{"id": 10, "item_id": 1, "event_type": "Price Change"}]
+        m["get_store_preferences_for_users"].return_value = {"uid-a": {"UK"}}
+        m["get_event_preferences_for_users"].return_value = {"uid-a": {"New Item", "Restocked"}}
+
+        lf.check_for_updates()
+
         m["send_email"].assert_not_called()
 
     def test_unknown_change_does_not_email(self):

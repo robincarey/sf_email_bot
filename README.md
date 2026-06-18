@@ -216,6 +216,7 @@ Enable the **Magic Link** provider under **Auth > Providers**.
 |---|---|
 | `profiles` | User accounts linked to Supabase Auth, with `is_active` and `pause_all_alerts` |
 | `user_store_preferences` | Per-user per-store notification toggles (Broken Binding collections + Folio Society) |
+| `user_event_preferences` | Per-user toggles for new items, restocks, and price changes |
 | `works`, `editions`, `retailer_listings` | Silver catalog (canonical titles, editions, store listings) |
 | `catalog_listings`, `catalog_events`, `catalog_restock_feed` | Gold read views for app UI |
 | `analytics_*` views | Gold analytics marts |
@@ -229,7 +230,6 @@ Enable the **Magic Link** provider under **Auth > Providers**.
 
 ## Future enhancements
 
-- **Per-event-type preferences** — filter by event type (restocks, price changes, etc.)
 - **Analytics dashboard** — "wrapped"-style metrics (most restocked, longest in stock, etc.)
 - **Hard account deletion** — Supabase Edge Function to fully delete auth + profile data
 

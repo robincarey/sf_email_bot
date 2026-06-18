@@ -52,6 +52,8 @@ PRICE_PLACEHOLDER = "No price found"
 NAME_PLACEHOLDER = "No name found"
 MIN_EMAILABLE_PRICE_CHANGE_CENTS = 10  # $0.10; ignore minor seller-side price flicker
 
+DEFAULT_EMAILABLE_EVENT_TYPES = frozenset({"New Item", "Restocked", "Price Change"})
+
 def get_supabase():
     global _supabase_client
     if _supabase_client is None:
@@ -143,6 +145,31 @@ def get_store_preferences_for_users(user_ids, run_id):
         return prefs
     except Exception as e:
         logger.error(f"[{run_id}] Error loading store preferences: {e}")
+        return {}
+
+
+def get_event_preferences_for_users(user_ids, run_id):
+    """Return {user_id: set(enabled_event_types)} for the given user IDs."""
+    if not user_ids:
+        return {}
+    try:
+        resp = (
+            get_supabase()
+            .table("user_event_preferences")
+            .select("user_id, event_type, enabled")
+            .in_("user_id", list(user_ids))
+            .execute()
+        )
+        prefs = {}
+        for row in (resp.data or []):
+            uid = row["user_id"]
+            if uid not in prefs:
+                prefs[uid] = set()
+            if row["enabled"]:
+                prefs[uid].add(row["event_type"])
+        return prefs
+    except Exception as e:
+        logger.error(f"[{run_id}] Error loading event preferences: {e}")
         return {}
 
 
@@ -732,6 +759,7 @@ def check_for_updates(store_filter=None):
 
     user_ids = [r["id"] for r in recipients if r["id"]]
     store_prefs = get_store_preferences_for_users(user_ids, run_id)
+    event_prefs = get_event_preferences_for_users(user_ids, run_id)
     user_watchlists = get_watchlist_for_users(user_ids, run_id)
 
     edition_by_link = fetch_edition_ids_by_link(
@@ -746,6 +774,7 @@ def check_for_updates(store_filter=None):
 
     for recip in recipients:
         enabled_stores = store_prefs.get(recip["id"])
+        enabled_event_types = event_prefs.get(recip["id"], DEFAULT_EMAILABLE_EVENT_TYPES)
         watched_edition_ids = user_watchlists.get(recip["id"], set())
 
         if enabled_stores is not None:
@@ -756,6 +785,11 @@ def check_for_updates(store_filter=None):
             ]
         else:
             recip_items = items_to_email
+
+        recip_items = [
+            i for i in recip_items
+            if i.get("event_type") in enabled_event_types
+        ]
 
         if not recip_items:
             logger.info(f"[{run_id}] No matching items for {recip['email']}; skipping.")
