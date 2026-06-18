@@ -9,24 +9,7 @@ import {
   removeFromWatchlist,
   type WatchlistTargets,
 } from '../lib/watchlist'
-
-interface ItemInfo {
-  name: string
-  link: string
-  store: string | null
-}
-
-interface AlertEvent {
-  id: number
-  item_id: number
-  event_type: string
-  store: string
-  event_time: string
-  in_stock: boolean
-  old_value: string | null
-  new_value: string | null
-  items_seen: ItemInfo | ItemInfo[] | null
-}
+import type { CatalogEvent } from '../lib/catalog'
 
 interface RecentAlertsProps {
   onWatchlistChange?: () => void
@@ -34,7 +17,7 @@ interface RecentAlertsProps {
 
 export default function RecentAlerts({ onWatchlistChange }: RecentAlertsProps) {
   const { user } = useAuth()
-  const [events, setEvents] = useState<AlertEvent[]>([])
+  const [events, setEvents] = useState<CatalogEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [watchlistTargets, setWatchlistTargets] = useState<WatchlistTargets>({
     itemIds: new Set(),
@@ -50,21 +33,16 @@ export default function RecentAlerts({ onWatchlistChange }: RecentAlertsProps) {
   useEffect(() => {
     async function fetchEvents() {
       const { data, error } = await supabase
-        .from('item_events')
-        .select('id, item_id, event_type, store, event_time, in_stock, old_value, new_value, items_seen!inner(name, link, store)')
+        .from('catalog_events')
+        .select('id, item_id, edition_id, event_type, store, event_time, in_stock, old_value, new_value, name, link')
         .order('event_time', { ascending: false })
         .limit(20)
 
       if (error) {
         console.error('Error fetching events:', error)
+        setEvents([])
       } else {
-        const normalized = (data ?? []).map((row) => {
-          const item = Array.isArray(row.items_seen)
-            ? row.items_seen[0] ?? null
-            : row.items_seen
-          return { ...row, items_seen: item } as AlertEvent
-        })
-        setEvents(normalized)
+        setEvents((data ?? []) as CatalogEvent[])
       }
       setLoading(false)
     }
@@ -72,25 +50,29 @@ export default function RecentAlerts({ onWatchlistChange }: RecentAlertsProps) {
     fetchWatchlist()
   }, [fetchWatchlist])
 
-  const toggleWatch = async (itemId: number) => {
+  const toggleWatch = async (itemId: number, editionId: number | null) => {
     if (!user) return
     setTogglingId(itemId)
-    const watched = isItemWatched(itemId, null, watchlistTargets)
+    const watched = isItemWatched(itemId, editionId, watchlistTargets)
 
     try {
       if (watched) {
-        await removeFromWatchlist(user.id, itemId)
+        await removeFromWatchlist(user.id, itemId, editionId)
         setWatchlistTargets((prev) => {
           const itemIds = new Set(prev.itemIds)
+          const editionIds = new Set(prev.editionIds)
           itemIds.delete(itemId)
-          return { ...prev, itemIds }
+          if (editionId != null) editionIds.delete(editionId)
+          return { itemIds, editionIds }
         })
       } else {
         await addToWatchlist(user.id, itemId)
-        setWatchlistTargets((prev) => ({
-          ...prev,
-          itemIds: new Set(prev.itemIds).add(itemId),
-        }))
+        setWatchlistTargets((prev) => {
+          const itemIds = new Set(prev.itemIds).add(itemId)
+          const editionIds = new Set(prev.editionIds)
+          if (editionId != null) editionIds.add(editionId)
+          return { itemIds, editionIds }
+        })
       }
     } catch (err) {
       console.error('Error toggling watchlist:', err)
@@ -132,13 +114,12 @@ export default function RecentAlerts({ onWatchlistChange }: RecentAlertsProps) {
         </thead>
         <tbody>
           {events.map((evt) => {
-            const item = Array.isArray(evt.items_seen) ? evt.items_seen[0] : evt.items_seen
-            const watched = isItemWatched(evt.item_id, null, watchlistTargets)
+            const watched = isItemWatched(evt.item_id, evt.edition_id, watchlistTargets)
             return (
             <tr key={evt.id} className="border-b border-border last:border-0">
               <td className="py-3 pr-2">
                 <button
-                  onClick={() => toggleWatch(evt.item_id)}
+                  onClick={() => toggleWatch(evt.item_id, evt.edition_id)}
                   disabled={togglingId === evt.item_id}
                   className="text-lg leading-none cursor-pointer disabled:opacity-50 hover:scale-110 transition-transform"
                   title={watched ? 'Remove from watchlist' : 'Add to watchlist'}
@@ -151,17 +132,17 @@ export default function RecentAlerts({ onWatchlistChange }: RecentAlertsProps) {
                 </button>
               </td>
               <td className="py-3 pr-4">
-                {item ? (
+                {evt.link ? (
                   <a
-                    href={item.link}
+                    href={evt.link}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-brand hover:text-brand-dark font-medium hover:underline"
                   >
-                    {item.name}
+                    {evt.name ?? 'Unknown item'}
                   </a>
                 ) : (
-                  <span className="text-text-muted italic">Unknown item</span>
+                  <span className="text-text-muted italic">{evt.name ?? 'Unknown item'}</span>
                 )}
               </td>
               <td className="py-3 pr-4">
@@ -180,7 +161,7 @@ export default function RecentAlerts({ onWatchlistChange }: RecentAlertsProps) {
                   </span>
                 )}
               </td>
-              <td className="py-3 pr-4 text-text-muted">{evt.store || item?.store || '\u2014'}</td>
+              <td className="py-3 pr-4 text-text-muted">{evt.store || '\u2014'}</td>
               <td className="py-3 text-text-muted whitespace-nowrap">
                 {formatRelativeTime(evt.event_time)}
               </td>

@@ -8,16 +8,9 @@ import {
   removeFromWatchlist,
   type WatchlistTargets,
 } from '../lib/watchlist'
+import type { CatalogListing } from '../lib/catalog'
 
-interface Item {
-  id: number
-  name: string
-  price: string | null
-  store: string | null
-  link: string
-  in_stock: boolean
-  last_in_stock: string | null
-}
+type Item = CatalogListing
 
 type StockFilter = 'all' | 'in_stock'
 
@@ -45,7 +38,6 @@ export default function Items() {
     itemIds: new Set(),
     editionIds: new Set(),
   })
-  const [editionByItemId, setEditionByItemId] = useState<Map<number, number>>(new Map())
   const [togglingId, setTogglingId] = useState<number | null>(null)
 
   const [stockFilter, setStockFilter] = useState<StockFilter>('all')
@@ -57,30 +49,15 @@ export default function Items() {
     async function fetchItems() {
       const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
       const { data, error } = await supabase
-        .from('items_seen')
-        .select('id, name, price, store, link, in_stock, last_in_stock')
+        .from('catalog_listings')
+        .select('id, edition_id, name, price, store, link, in_stock, last_in_stock')
         .or(`last_in_stock.gte.${cutoff},in_stock.eq.true`)
         .order('name', { ascending: true })
 
       if (error) {
         console.error('Error fetching items:', error)
       } else {
-        const rows = data ?? []
-        setItems(rows)
-        const itemIds = rows.map((r) => r.id)
-        if (itemIds.length > 0) {
-          const { data: listings } = await supabase
-            .from('retailer_listings')
-            .select('items_seen_id, edition_id')
-            .in('items_seen_id', itemIds)
-          const map = new Map<number, number>()
-          for (const row of listings ?? []) {
-            if (row.items_seen_id != null && row.edition_id != null) {
-              map.set(row.items_seen_id, row.edition_id)
-            }
-          }
-          setEditionByItemId(map)
-        }
+        setItems((data ?? []) as Item[])
       }
       setLoading(false)
     }
@@ -137,7 +114,7 @@ export default function Items() {
   const toggleWatch = async (itemId: number) => {
     if (!user) return
     setTogglingId(itemId)
-    const editionId = editionByItemId.get(itemId) ?? null
+    const editionId = items.find((i) => i.id === itemId)?.edition_id ?? null
     const watched = isItemWatched(itemId, editionId, watchlistTargets)
 
     try {
@@ -264,7 +241,7 @@ export default function Items() {
               </thead>
               <tbody>
                 {pageItems.map((item) => {
-                  const editionId = editionByItemId.get(item.id) ?? null
+                  const editionId = item.edition_id ?? null
                   const watched = isItemWatched(item.id, editionId, watchlistTargets)
                   return (
                     <tr key={item.id} className="border-b border-border last:border-0">

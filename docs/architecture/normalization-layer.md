@@ -49,6 +49,12 @@ live production app with approximately 180 users.
 8. Cut over reads to Silver behind a rollback-safe switch
 9. Decommission legacy writes after a stabilization window
 
+**Read-path views** (migration `015_catalog_read_views.sql`):
+
+- `catalog_listings` — item browser (replaces direct `items_seen` reads)
+- `catalog_events` — alert feed with canonical title/author
+- `catalog_restock_feed` — public landing restock feed
+
 ## Silver quality gate (promotion criteria)
 
 Before production reads move from legacy to Silver:

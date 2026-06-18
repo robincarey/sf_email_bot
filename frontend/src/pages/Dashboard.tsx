@@ -3,18 +3,13 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import RecentAlerts from '../components/RecentAlerts'
+import type { CatalogListing } from '../lib/catalog'
 
 interface WatchlistItem {
   id: string
   item_id: number
-  items_seen: {
-    name: string
-    link: string
-    store: string | null
-    price: string | null
-    in_stock: boolean
-    last_in_stock: string | null
-  }
+  edition_id: number | null
+  catalog: CatalogListing | null
 }
 
 const EXPIRY_MS = 30 * 24 * 60 * 60 * 1000
@@ -48,21 +43,41 @@ export default function Dashboard() {
 
   async function fetchWatchlist() {
     if (!user) return
-    const { data, error } = await supabase
+    const { data: rows, error } = await supabase
       .from('watchlist')
-      .select('id, item_id, items_seen!inner(name, link, store, price, in_stock, last_in_stock)')
+      .select('id, item_id, edition_id')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
     if (error) {
       console.error('Error fetching watchlist:', error)
-    } else {
-      const normalized = (data ?? []).map((row) => {
-        const item = Array.isArray(row.items_seen) ? row.items_seen[0] : row.items_seen
-        return { ...row, items_seen: item } as unknown as WatchlistItem
-      })
-      setWatchlist(normalized)
+      setLoadingWatchlist(false)
+      return
     }
+
+    const itemIds = (rows ?? []).map((r) => r.item_id)
+    let catalogById = new Map<number, CatalogListing>()
+    if (itemIds.length > 0) {
+      const { data: catalog, error: catalogError } = await supabase
+        .from('catalog_listings')
+        .select('id, edition_id, name, link, store, price, in_stock, last_in_stock')
+        .in('id', itemIds)
+
+      if (catalogError) {
+        console.error('Error fetching catalog listings:', catalogError)
+      } else {
+        catalogById = new Map((catalog ?? []).map((row) => [row.id as number, row as CatalogListing]))
+      }
+    }
+
+    setWatchlist(
+      (rows ?? []).map((row) => ({
+        id: row.id,
+        item_id: row.item_id,
+        edition_id: row.edition_id,
+        catalog: catalogById.get(row.item_id) ?? null,
+      })),
+    )
     setLoadingWatchlist(false)
   }
 
@@ -150,24 +165,32 @@ export default function Dashboard() {
               </thead>
               <tbody>
                 {watchlist.map((w) => {
-                  const item = w.items_seen
-                  const expired = isExpired(item.last_in_stock)
+                  const item = w.catalog
+                  const expired = isExpired(item?.last_in_stock ?? null)
                   return (
                     <tr key={w.id} className={`border-b border-border last:border-0 ${expired ? 'opacity-50' : ''}`}>
                       <td className="py-3 pr-4">
-                        <a
-                          href={item.link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-brand hover:text-brand-dark font-medium hover:underline"
-                        >
-                          {item.name}
-                        </a>
+                        {item?.link ? (
+                          <a
+                            href={item.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-brand hover:text-brand-dark font-medium hover:underline"
+                          >
+                            {item.name}
+                          </a>
+                        ) : (
+                          <span className="font-medium">{item?.name ?? 'Unknown item'}</span>
+                        )}
                       </td>
-                      <td className="py-3 pr-4 text-text-muted">{item.store || '\u2014'}</td>
-                      <td className="py-3 pr-4 text-text-muted">{item.price || '\u2014'}</td>
+                      <td className="py-3 pr-4 text-text-muted">{item?.store || '\u2014'}</td>
+                      <td className="py-3 pr-4 text-text-muted">{item?.price || '\u2014'}</td>
                       <td className="py-3 pr-4">
-                        {expired ? (
+                        {!item ? (
+                          <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+                            Unknown
+                          </span>
+                        ) : expired ? (
                           <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
                             Unavailable
                           </span>

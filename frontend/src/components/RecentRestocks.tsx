@@ -1,42 +1,21 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { eventBadgeColors, formatRelativeTime } from '../lib/eventUtils'
-
-type ItemInfo = {
-  name: string
-  link: string
-  store: string | null
-  price: string | null
-}
-
-type RestockEvent = {
-  id: number
-  event_type: string
-  event_time: string
-  items_seen: ItemInfo | ItemInfo[] | null
-}
+import type { CatalogRestockFeedItem } from '../lib/catalog'
 
 const DEDUPE_WINDOW_MS = 6 * 60 * 60 * 1000 // 6 hours
 
-function dedupeEventsByItemWithinWindow(
-  rows: Array<
-    Omit<RestockEvent, 'items_seen'> & {
-      item: ItemInfo | null
-    }
-  >,
-) {
-  const kept: Array<
-    Omit<RestockEvent, 'items_seen'> & {
-      item: ItemInfo | null
-    }
-  > = []
+type FeedEvent = CatalogRestockFeedItem
 
-  // We keep the latest event for each item within the dedupe window,
-  // which prevents rapid successive restocks from looking like duplicates.
+function dedupeEventsWithinWindow(rows: FeedEvent[]) {
+  const kept: FeedEvent[] = []
   const lastKeptAtByKey = new Map<string, number>()
 
   for (const evt of rows) {
-    const key = evt.item?.link ?? evt.item?.name ?? 'unknown'
+    const key =
+      evt.edition_id != null
+        ? `edition:${evt.edition_id}`
+        : evt.link ?? evt.name ?? 'unknown'
     const t = new Date(evt.event_time).getTime()
 
     if (!Number.isFinite(t)) {
@@ -63,7 +42,6 @@ function dedupeEventsByItemWithinWindow(
 function formatStoreLine(store: string | null) {
   if (!store) return '—'
 
-  // Broken Binding stores are formatted like "Broken Binding - To The Stars".
   const parts = store.split(' - ')
   if (parts.length >= 2) {
     return `${parts[0]} · ${parts.slice(1).join(' - ')}`
@@ -73,13 +51,7 @@ function formatStoreLine(store: string | null) {
 }
 
 export default function RecentRestocks() {
-  const [events, setEvents] = useState<
-    Array<
-      Omit<RestockEvent, 'items_seen'> & {
-        item: ItemInfo | null
-      }
-    >
-  >([])
+  const [events, setEvents] = useState<FeedEvent[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -87,11 +59,8 @@ export default function RecentRestocks() {
 
     async function fetchEvents() {
       const { data, error } = await supabase
-        .from('item_events')
-        .select(
-          'id, event_type, event_time, items_seen!inner(name, link, store, price)',
-        )
-        .in('event_type', ['Restocked', 'New Item'])
+        .from('catalog_restock_feed')
+        .select('id, event_type, event_time, item_id, edition_id, name, link, store, price')
         .order('event_time', { ascending: false })
         .limit(20)
 
@@ -104,12 +73,7 @@ export default function RecentRestocks() {
         return
       }
 
-      const normalized = (data ?? []).map((row: RestockEvent) => {
-        const item = Array.isArray(row.items_seen) ? row.items_seen[0] ?? null : row.items_seen
-        return { id: row.id, event_type: row.event_type, event_time: row.event_time, item }
-      })
-
-      setEvents(dedupeEventsByItemWithinWindow(normalized))
+      setEvents(dedupeEventsWithinWindow((data ?? []) as FeedEvent[]))
       setLoading(false)
     }
 
@@ -142,11 +106,11 @@ export default function RecentRestocks() {
     <div className="space-y-3">
       {events.map((evt) => {
         const badgeClass = eventBadgeColors[evt.event_type] ?? 'bg-gray-100 text-gray-800'
-        const storeLine = formatStoreLine(evt.item?.store ?? null)
+        const storeLine = formatStoreLine(evt.store)
         return (
           <a
             key={evt.id}
-            href={evt.item?.link ?? '#'}
+            href={evt.link ?? '#'}
             target="_blank"
             rel="noopener noreferrer"
             className="group block rounded-xl bg-surface border border-border shadow-sm p-4 hover:bg-surface-alt transition-colors hover:shadow-md"
@@ -155,9 +119,9 @@ export default function RecentRestocks() {
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <div className="min-w-0 font-medium text-text truncate transition-colors group-hover:text-brand-dark">
-                    {evt.item?.name ?? 'Unknown item'}
+                    {evt.name ?? 'Unknown item'}
                   </div>
-                  {evt.item?.link ? (
+                  {evt.link ? (
                     <span
                       aria-hidden
                       className="text-brand/80 group-hover:text-brand-dark transition-colors"
@@ -175,7 +139,7 @@ export default function RecentRestocks() {
                 <div className="mt-2 text-sm text-text-muted">
                   <span className="truncate">
                     {storeLine} <span aria-hidden>&middot;</span>{' '}
-                    {evt.item?.price ?? '\u2014'}
+                    {evt.price ?? '\u2014'}
                   </span>
                 </div>
               </div>
@@ -189,4 +153,3 @@ export default function RecentRestocks() {
     </div>
   )
 }
-
