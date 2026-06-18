@@ -4,6 +4,8 @@ import random
 import logging
 from bs4 import BeautifulSoup
 
+from open_library import extract_isbn_from_text
+
 logger = logging.getLogger(__name__)
 
 # Shopify vendor field is the retailer, not the book author on Broken Binding.
@@ -25,6 +27,18 @@ def extract_product_author(product_soup) -> str | None:
     return text or None
 
 
+def extract_isbn_from_html(product_soup) -> str | None:
+    """Best-effort ISBN from product detail markup or description."""
+    chunks: list[str] = []
+    for el in product_soup.select(
+        ".productInfo, .product__description, .product__info-container, [class*='product']"
+    ):
+        text = el.get_text(" ", strip=True)
+        if text:
+            chunks.append(text)
+    return extract_isbn_from_text(" ".join(chunks))
+
+
 def cover_and_isbn_from_shopify_json(product_data: dict) -> tuple[str | None, str | None]:
     """Extract cover URL and ISBN from a Shopify product JSON payload."""
     product = product_data.get("product") or {}
@@ -39,6 +53,9 @@ def cover_and_isbn_from_shopify_json(product_data: dict) -> tuple[str | None, st
         if barcode:
             isbn = barcode
             break
+
+    if not isbn:
+        isbn = extract_isbn_from_text(product.get("body_html"))
 
     return cover_url, isbn
 
@@ -156,6 +173,8 @@ def broken_binding_checks():
                             author = author_from_shopify_json(product_data)
                         if product_data:
                             cover_url, isbn = cover_and_isbn_from_shopify_json(product_data)
+                        if not isbn:
+                            isbn = extract_isbn_from_html(product_soup)
                         cart_button = product_soup.find("button", class_="product-form__submit")
                         if not cart_button or "Sold out" in cart_button.get_text(strip=True):
                             in_stock = False

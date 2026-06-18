@@ -3,6 +3,7 @@
 ALTER TABLE public.editions
   ADD COLUMN IF NOT EXISTS cover_url text;
 
+DROP VIEW IF EXISTS public.analytics_catalog_summary;
 DROP VIEW IF EXISTS public.catalog_restock_feed;
 DROP VIEW IF EXISTS public.catalog_events;
 DROP VIEW IF EXISTS public.catalog_listings;
@@ -84,3 +85,18 @@ WHERE ie.event_type IN ('Restocked', 'New Item');
 GRANT SELECT ON public.catalog_listings TO anon, authenticated;
 GRANT SELECT ON public.catalog_events TO anon, authenticated;
 GRANT SELECT ON public.catalog_restock_feed TO anon, authenticated;
+
+CREATE VIEW public.analytics_catalog_summary AS
+SELECT
+  (SELECT COUNT(*)::bigint FROM public.works) AS work_count,
+  (SELECT COUNT(*)::bigint FROM public.editions) AS edition_count,
+  (SELECT COUNT(*)::bigint FROM public.catalog_listings WHERE in_stock IS TRUE) AS in_stock_listings,
+  (
+    SELECT COUNT(*)::bigint
+    FROM public.item_events
+    WHERE event_time >= (now() AT TIME ZONE 'UTC') - interval '30 days'
+      AND event_type <> 'Unknown Change'
+  ) AS events_last_30_days,
+  (SELECT MAX(snapshot_date) FROM public.item_status_daily) AS snapshot_through;
+
+GRANT SELECT ON public.analytics_catalog_summary TO anon, authenticated;

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 
-from open_library import normalize_text
+from open_library import lookup_metadata, normalize_text
 
 # Curated author corrections (normalized title -> author). Scraped/OL values must not win.
 WORK_AUTHOR_OVERRIDES_BY_NORM_TITLE: dict[str, str] = {
@@ -180,6 +180,29 @@ def _normalize_isbn(value: str | None) -> str | None:
     return cleaned or None
 
 
+def enrich_edition_media_from_ol(
+    *,
+    title: str | None,
+    ol_work_key: str | None,
+    isbn: str | None,
+    cover_url: str | None,
+) -> tuple[str | None, str | None]:
+    """Fill missing ISBN/cover from Open Library when the store did not provide them."""
+    if isbn and cover_url:
+        return isbn, cover_url
+    try:
+        meta = lookup_metadata(title=title, ol_work_key=ol_work_key)
+    except Exception:
+        return isbn, cover_url
+    if not meta:
+        return isbn, cover_url
+    if not isbn and meta.get("isbn"):
+        isbn = meta["isbn"]
+    if not cover_url and meta.get("cover_url"):
+        cover_url = meta["cover_url"]
+    return isbn, cover_url
+
+
 def ensure_edition(
     sb,
     *,
@@ -246,6 +269,24 @@ def ensure_catalog_for_item(
     work_id = ensure_work(sb, title, author)
     if not work_id:
         return None
+
+    if not isbn or not cover_url:
+        work_row = (
+            sb.table("works")
+            .select("open_library_id, title")
+            .eq("id", work_id)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+        if work_row:
+            isbn, cover_url = enrich_edition_media_from_ol(
+                title=work_row[0].get("title") or title,
+                ol_work_key=work_row[0].get("open_library_id"),
+                isbn=isbn,
+                cover_url=cover_url,
+            )
 
     edition_id = ensure_edition(
         sb,

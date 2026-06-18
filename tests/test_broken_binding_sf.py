@@ -43,6 +43,18 @@ class TestBrokenBindingAuthor(unittest.TestCase):
         self.assertEqual(cover_url, "https://cdn.shopify.com/cover.jpg")
         self.assertEqual(isbn, "9780123456789")
 
+    def test_cover_and_isbn_from_body_html(self):
+        payload = {
+            "product": {
+                "images": [],
+                "variants": [{"barcode": ""}],
+                "body_html": "<p>ISBN-13: 978-1-78108-970-1</p>",
+            }
+        }
+        cover_url, isbn = cover_and_isbn_from_shopify_json(payload)
+        self.assertIsNone(cover_url)
+        self.assertEqual(isbn, "9781781089701")
+
     def test_cover_and_isbn_empty_when_missing(self):
         cover_url, isbn = cover_and_isbn_from_shopify_json({"product": {}})
         self.assertIsNone(cover_url)
