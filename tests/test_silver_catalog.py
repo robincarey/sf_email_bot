@@ -1,6 +1,6 @@
 import unittest
 
-from silver_catalog import clean_title, normalize_title, normalize_url
+from silver_catalog import _normalize_isbn, clean_title, normalize_title, normalize_url
 
 
 class TestSilverCatalog(unittest.TestCase):
@@ -27,6 +27,10 @@ class TestSilverCatalog(unittest.TestCase):
             normalize_url("https://example.com/foo/?x=1"),
             "https://example.com/foo",
         )
+
+    def test_normalize_isbn(self):
+        self.assertEqual(_normalize_isbn("978-0-123456-78-9"), "9780123456789")
+        self.assertIsNone(_normalize_isbn(""))
 
 
 if __name__ == "__main__":

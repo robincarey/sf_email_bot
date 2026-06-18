@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 
 from scrapers.broken_binding_sf import (
     author_from_shopify_json,
+    cover_and_isbn_from_shopify_json,
     extract_product_author,
 )
 
@@ -27,6 +28,25 @@ class TestBrokenBindingAuthor(unittest.TestCase):
     def test_accepts_non_store_vendor_in_json(self):
         payload = {"product": {"vendor": "Jane Author"}}
         self.assertEqual(author_from_shopify_json(payload), "Jane Author")
+
+    def test_cover_and_isbn_from_shopify_json(self):
+        payload = {
+            "product": {
+                "images": [{"src": "https://cdn.shopify.com/cover.jpg"}],
+                "variants": [
+                    {"barcode": ""},
+                    {"barcode": "978-0-123456-78-9"},
+                ],
+            }
+        }
+        cover_url, isbn = cover_and_isbn_from_shopify_json(payload)
+        self.assertEqual(cover_url, "https://cdn.shopify.com/cover.jpg")
+        self.assertEqual(isbn, "9780123456789")
+
+    def test_cover_and_isbn_empty_when_missing(self):
+        cover_url, isbn = cover_and_isbn_from_shopify_json({"product": {}})
+        self.assertIsNone(cover_url)
+        self.assertIsNone(isbn)
 
 
 if __name__ == "__main__":

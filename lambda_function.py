@@ -304,6 +304,8 @@ def upsert_retailer_listings(items, link_to_id, run_id):
                 store=store,
                 author=item.get("author"),
                 collection_map=collection_map,
+                isbn=item.get("isbn"),
+                cover_url=item.get("cover_url"),
             )
             if not resolved:
                 logger.warning(

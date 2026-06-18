@@ -9,6 +9,7 @@ import {
   type WatchlistTargets,
 } from '../lib/watchlist'
 import { formatAuthor, type CatalogListing } from '../lib/catalog'
+import BookCover from '../components/BookCover'
 
 type Item = CatalogListing
 
@@ -49,7 +50,7 @@ export default function Items() {
       const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
       const { data, error } = await supabase
         .from('catalog_listings')
-        .select('id, edition_id, name, author, price, store, link, in_stock, last_in_stock')
+        .select('id, edition_id, name, author, price, store, link, in_stock, last_in_stock, isbn, cover_url, open_library_id')
         .or(`last_in_stock.gte.${cutoff},in_stock.eq.true`)
         .order('name', { ascending: true })
 
@@ -230,6 +231,9 @@ export default function Items() {
               <thead>
                 <tr className="border-b border-border text-left text-text-muted bg-surface-alt">
                   <th className="py-2 px-3 font-medium w-8"></th>
+                  <th className="py-2 px-2 font-medium w-12">
+                    <span className="sr-only">Cover</span>
+                  </th>
                   <th className="py-2 px-3 font-medium">Book</th>
                   <th className="py-2 px-3 font-medium">Author</th>
                   <th className="py-2 px-3 font-medium">Store</th>
@@ -256,6 +260,15 @@ export default function Items() {
                             <span className="text-text-muted">&#9734;</span>
                           )}
                         </button>
+                      </td>
+                      <td className="py-2.5 px-2">
+                        <BookCover
+                          coverUrl={item.cover_url}
+                          isbn={item.isbn}
+                          openLibraryId={item.open_library_id}
+                          title={item.name}
+                          size="sm"
+                        />
                       </td>
                       <td className="py-2.5 px-3">
                         <a

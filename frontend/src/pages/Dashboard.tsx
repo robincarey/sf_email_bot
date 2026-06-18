@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import RecentAlerts from '../components/RecentAlerts'
-import { formatAuthor, type CatalogListing } from '../lib/catalog'
+import WatchlistCard from '../components/WatchlistCard'
+import { type CatalogListing } from '../lib/catalog'
 
 interface WatchlistItem {
   id: string
@@ -59,7 +60,7 @@ export default function Dashboard() {
     if (editionIds.length > 0) {
       const { data: catalog, error: catalogError } = await supabase
         .from('catalog_listings')
-        .select('edition_id, name, author, link, store, price, in_stock, last_in_stock')
+        .select('edition_id, name, author, link, store, price, in_stock, last_in_stock, isbn, cover_url, open_library_id')
         .in('edition_id', editionIds)
 
       if (catalogError) {
@@ -146,9 +147,9 @@ export default function Dashboard() {
         </p>
 
         {loadingWatchlist ? (
-          <div className="animate-pulse space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 animate-pulse">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-10 bg-gray-100 dark:bg-gray-800 rounded" />
+              <div key={i} className="h-64 bg-gray-100 dark:bg-gray-800 rounded-xl" />
             ))}
           </div>
         ) : watchlist.length === 0 ? (
@@ -156,74 +157,16 @@ export default function Dashboard() {
             You haven't watched any items yet. Use the &#9733; icon in Recent Alerts to start.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-text-muted">
-                  <th className="pb-2 pr-4 font-medium">Book</th>
-                  <th className="pb-2 pr-4 font-medium">Author</th>
-                  <th className="pb-2 pr-4 font-medium">Store</th>
-                  <th className="pb-2 pr-4 font-medium">Price</th>
-                  <th className="pb-2 pr-4 font-medium">Status</th>
-                  <th className="pb-2 font-medium w-8"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {watchlist.map((w) => {
-                  const item = w.catalog
-                  const expired = isExpired(item?.last_in_stock ?? null)
-                  return (
-                    <tr key={w.id} className={`border-b border-border last:border-0 ${expired ? 'opacity-50' : ''}`}>
-                      <td className="py-3 pr-4">
-                        {item?.link ? (
-                          <a
-                            href={item.link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-brand hover:text-brand-dark font-medium hover:underline"
-                          >
-                            {item.name}
-                          </a>
-                        ) : (
-                          <span className="font-medium">{item?.name ?? 'Unknown book'}</span>
-                        )}
-                      </td>
-                      <td className="py-3 pr-4 text-text-muted">{formatAuthor(item?.author)}</td>
-                      <td className="py-3 pr-4 text-text-muted">{item?.store || '\u2014'}</td>
-                      <td className="py-3 pr-4 text-text-muted">{item?.price || '\u2014'}</td>
-                      <td className="py-3 pr-4">
-                        {!item ? (
-                          <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
-                            Unknown
-                          </span>
-                        ) : expired ? (
-                          <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
-                            Unavailable
-                          </span>
-                        ) : item.in_stock ? (
-                          <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
-                            In Stock
-                          </span>
-                        ) : (
-                          <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300">
-                            Out of Stock
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3">
-                        <button
-                          onClick={() => removeFromWatchlist(w.id)}
-                          className="text-text-muted hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
-                          title="Remove from watchlist"
-                        >
-                          &#10005;
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {watchlist.map((w) => (
+              <WatchlistCard
+                key={w.id}
+                watchlistId={w.id}
+                catalog={w.catalog}
+                expired={isExpired(w.catalog?.last_in_stock ?? null)}
+                onRemove={removeFromWatchlist}
+              />
+            ))}
           </div>
         )}
       </div>

@@ -173,6 +173,13 @@ def find_edition_id(sb, publisher_id: int, title: str, edition_type: str | None 
     return resp.data[0]["id"] if resp.data else None
 
 
+def _normalize_isbn(value: str | None) -> str | None:
+    if not value:
+        return None
+    cleaned = re.sub(r"[^0-9Xx]", "", value.strip())
+    return cleaned or None
+
+
 def ensure_edition(
     sb,
     *,
@@ -181,10 +188,22 @@ def ensure_edition(
     title: str,
     edition_type: str | None = None,
     physical_format: str = "hardcover",
+    isbn: str | None = None,
+    cover_url: str | None = None,
 ):
     """Return edition id, creating the edition when missing."""
+    isbn = _normalize_isbn(isbn)
+    cover_url = (cover_url or "").strip() or None
+
     existing = find_edition_id(sb, publisher_id, title, edition_type)
     if existing:
+        update: dict[str, str] = {}
+        if isbn:
+            update["isbn"] = isbn
+        if cover_url:
+            update["cover_url"] = cover_url
+        if update:
+            sb.table("editions").update(update).eq("id", existing).execute()
         return existing
 
     norm_title = normalize_title(title)
@@ -200,12 +219,25 @@ def ensure_edition(
     }
     if edition_type:
         row["edition_type"] = edition_type
+    if isbn:
+        row["isbn"] = isbn
+    if cover_url:
+        row["cover_url"] = cover_url
 
     resp = sb.table("editions").insert(row).execute()
     return resp.data[0]["id"] if resp.data else None
 
 
-def ensure_catalog_for_item(sb, *, title: str, store: str, author: str | None, collection_map: dict):
+def ensure_catalog_for_item(
+    sb,
+    *,
+    title: str,
+    store: str,
+    author: str | None,
+    collection_map: dict,
+    isbn: str | None = None,
+    cover_url: str | None = None,
+):
     """Resolve collection, work, and edition for a scraped/catalog item."""
     collection = collection_map.get(store)
     if not collection:
@@ -220,6 +252,8 @@ def ensure_catalog_for_item(sb, *, title: str, store: str, author: str | None, c
         work_id=work_id,
         publisher_id=collection["publisher_id"],
         title=title,
+        isbn=isbn,
+        cover_url=cover_url,
     )
     if not edition_id:
         return None

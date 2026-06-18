@@ -11,6 +11,9 @@ export type CatalogListing = {
   price: string | null
   in_stock: boolean
   last_in_stock: string | null
+  isbn: string | null
+  cover_url: string | null
+  open_library_id: string | null
 }
 
 export type CatalogEvent = {
