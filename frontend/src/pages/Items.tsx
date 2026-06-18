@@ -1,6 +1,13 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import {
+  addToWatchlist,
+  fetchWatchlistTargets,
+  isItemWatched,
+  removeFromWatchlist,
+  type WatchlistTargets,
+} from '../lib/watchlist'
 
 interface Item {
   id: number
@@ -34,7 +41,11 @@ export default function Items() {
 
   const [items, setItems] = useState<Item[]>([])
   const [loading, setLoading] = useState(true)
-  const [watchedIds, setWatchedIds] = useState<Set<number>>(new Set())
+  const [watchlistTargets, setWatchlistTargets] = useState<WatchlistTargets>({
+    itemIds: new Set(),
+    editionIds: new Set(),
+  })
+  const [editionByItemId, setEditionByItemId] = useState<Map<number, number>>(new Map())
   const [togglingId, setTogglingId] = useState<number | null>(null)
 
   const [stockFilter, setStockFilter] = useState<StockFilter>('all')
@@ -54,7 +65,22 @@ export default function Items() {
       if (error) {
         console.error('Error fetching items:', error)
       } else {
-        setItems(data ?? [])
+        const rows = data ?? []
+        setItems(rows)
+        const itemIds = rows.map((r) => r.id)
+        if (itemIds.length > 0) {
+          const { data: listings } = await supabase
+            .from('retailer_listings')
+            .select('items_seen_id, edition_id')
+            .in('items_seen_id', itemIds)
+          const map = new Map<number, number>()
+          for (const row of listings ?? []) {
+            if (row.items_seen_id != null && row.edition_id != null) {
+              map.set(row.items_seen_id, row.edition_id)
+            }
+          }
+          setEditionByItemId(map)
+        }
       }
       setLoading(false)
     }
@@ -63,13 +89,7 @@ export default function Items() {
 
   const fetchWatchlist = useCallback(async () => {
     if (!user) return
-    const { data } = await supabase
-      .from('watchlist')
-      .select('item_id')
-      .eq('user_id', user.id)
-    if (data) {
-      setWatchedIds(new Set(data.map((r) => r.item_id)))
-    }
+    setWatchlistTargets(await fetchWatchlistTargets(user.id))
   }, [user])
 
   useEffect(() => {
@@ -117,23 +137,30 @@ export default function Items() {
   const toggleWatch = async (itemId: number) => {
     if (!user) return
     setTogglingId(itemId)
+    const editionId = editionByItemId.get(itemId) ?? null
+    const watched = isItemWatched(itemId, editionId, watchlistTargets)
 
-    if (watchedIds.has(itemId)) {
-      await supabase
-        .from('watchlist')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('item_id', itemId)
-      setWatchedIds((prev) => {
-        const next = new Set(prev)
-        next.delete(itemId)
-        return next
-      })
-    } else {
-      await supabase
-        .from('watchlist')
-        .insert({ user_id: user.id, item_id: itemId })
-      setWatchedIds((prev) => new Set(prev).add(itemId))
+    try {
+      if (watched) {
+        await removeFromWatchlist(user.id, itemId, editionId)
+        setWatchlistTargets((prev) => {
+          const itemIds = new Set(prev.itemIds)
+          const editionIds = new Set(prev.editionIds)
+          itemIds.delete(itemId)
+          if (editionId != null) editionIds.delete(editionId)
+          return { itemIds, editionIds }
+        })
+      } else {
+        await addToWatchlist(user.id, itemId)
+        setWatchlistTargets((prev) => {
+          const itemIds = new Set(prev.itemIds).add(itemId)
+          const editionIds = new Set(prev.editionIds)
+          if (editionId != null) editionIds.add(editionId)
+          return { itemIds, editionIds }
+        })
+      }
+    } catch (err) {
+      console.error('Error toggling watchlist:', err)
     }
 
     setTogglingId(null)
@@ -237,7 +264,8 @@ export default function Items() {
               </thead>
               <tbody>
                 {pageItems.map((item) => {
-                  const watched = watchedIds.has(item.id)
+                  const editionId = editionByItemId.get(item.id) ?? null
+                  const watched = isItemWatched(item.id, editionId, watchlistTargets)
                   return (
                     <tr key={item.id} className="border-b border-border last:border-0">
                       <td className="py-2.5 px-3">

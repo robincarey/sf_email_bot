@@ -2,6 +2,13 @@ import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { eventBadgeColors, formatRelativeTime } from '../lib/eventUtils'
+import {
+  addToWatchlist,
+  fetchWatchlistTargets,
+  isItemWatched,
+  removeFromWatchlist,
+  type WatchlistTargets,
+} from '../lib/watchlist'
 
 interface ItemInfo {
   name: string
@@ -29,18 +36,15 @@ export default function RecentAlerts({ onWatchlistChange }: RecentAlertsProps) {
   const { user } = useAuth()
   const [events, setEvents] = useState<AlertEvent[]>([])
   const [loading, setLoading] = useState(true)
-  const [watchedIds, setWatchedIds] = useState<Set<number>>(new Set())
+  const [watchlistTargets, setWatchlistTargets] = useState<WatchlistTargets>({
+    itemIds: new Set(),
+    editionIds: new Set(),
+  })
   const [togglingId, setTogglingId] = useState<number | null>(null)
 
   const fetchWatchlist = useCallback(async () => {
     if (!user) return
-    const { data } = await supabase
-      .from('watchlist')
-      .select('item_id')
-      .eq('user_id', user.id)
-    if (data) {
-      setWatchedIds(new Set(data.map((r) => r.item_id)))
-    }
+    setWatchlistTargets(await fetchWatchlistTargets(user.id))
   }, [user])
 
   useEffect(() => {
@@ -71,23 +75,25 @@ export default function RecentAlerts({ onWatchlistChange }: RecentAlertsProps) {
   const toggleWatch = async (itemId: number) => {
     if (!user) return
     setTogglingId(itemId)
+    const watched = isItemWatched(itemId, null, watchlistTargets)
 
-    if (watchedIds.has(itemId)) {
-      await supabase
-        .from('watchlist')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('item_id', itemId)
-      setWatchedIds((prev) => {
-        const next = new Set(prev)
-        next.delete(itemId)
-        return next
-      })
-    } else {
-      await supabase
-        .from('watchlist')
-        .insert({ user_id: user.id, item_id: itemId })
-      setWatchedIds((prev) => new Set(prev).add(itemId))
+    try {
+      if (watched) {
+        await removeFromWatchlist(user.id, itemId)
+        setWatchlistTargets((prev) => {
+          const itemIds = new Set(prev.itemIds)
+          itemIds.delete(itemId)
+          return { ...prev, itemIds }
+        })
+      } else {
+        await addToWatchlist(user.id, itemId)
+        setWatchlistTargets((prev) => ({
+          ...prev,
+          itemIds: new Set(prev.itemIds).add(itemId),
+        }))
+      }
+    } catch (err) {
+      console.error('Error toggling watchlist:', err)
     }
 
     setTogglingId(null)
@@ -127,7 +133,7 @@ export default function RecentAlerts({ onWatchlistChange }: RecentAlertsProps) {
         <tbody>
           {events.map((evt) => {
             const item = Array.isArray(evt.items_seen) ? evt.items_seen[0] : evt.items_seen
-            const watched = watchedIds.has(evt.item_id)
+            const watched = isItemWatched(evt.item_id, null, watchlistTargets)
             return (
             <tr key={evt.id} className="border-b border-border last:border-0">
               <td className="py-3 pr-2">

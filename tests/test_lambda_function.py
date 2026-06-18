@@ -150,6 +150,7 @@ class TestCheckForUpdates(unittest.TestCase):
             "get_recipients_for_run": patch.object(lf, "get_recipients_for_run"),
             "get_store_preferences_for_users": patch.object(lf, "get_store_preferences_for_users"),
             "get_watchlist_for_users": patch.object(lf, "get_watchlist_for_users"),
+            "fetch_edition_ids_by_item_id": patch.object(lf, "fetch_edition_ids_by_item_id"),
             "load_seen_items": patch.object(lf, "load_seen_items"),
             "broken_binding_checks": patch.object(lf, "broken_binding_checks"),
             "send_email": patch("lambda_function.send_email"),
@@ -184,6 +185,7 @@ class TestCheckForUpdates(unittest.TestCase):
         mocks["insert_email_log"].return_value = []
         mocks["get_store_preferences_for_users"].return_value = {}
         mocks["get_watchlist_for_users"].return_value = {}
+        mocks["fetch_edition_ids_by_item_id"].return_value = {}
         mocks["store_checks"]["Broken Binding"].return_value = []
         mocks["store_checks"]["Folio Society - Sci-Fi & Fantasy"].return_value = []
         return mocks
@@ -458,7 +460,7 @@ class TestCheckForUpdates(unittest.TestCase):
         m["insert_events"].return_value = [{"id": 10, "item_id": 99, "event_type": "New Item"}]
         m["insert_email_log"].return_value = [{"id": 50, "user_id": "uid-a"}]
         m["get_store_preferences_for_users"].return_value = {"uid-a": {"Enabled Store"}}
-        m["get_watchlist_for_users"].return_value = {"uid-a": {99}}
+        m["get_watchlist_for_users"].return_value = {"uid-a": {"item_ids": {99}, "edition_ids": set()}}
 
         lf.check_for_updates()
 
@@ -484,6 +486,29 @@ class TestCheckForUpdates(unittest.TestCase):
 
         m["send_email"].assert_called_once()
 
+    def test_watchlist_edition_id_overrides_store_prefs(self):
+        """A watched edition (different listing) should still be emailed."""
+        m = self._patch_all()
+        m["get_recipients_for_run"].return_value = [self._recip("a@test.com", "uid-a")]
+        m["load_seen_items"].return_value = []
+        m["broken_binding_checks"].return_value = [
+            {"name": "Watched Book UK", "price": "$10", "store": "Disabled Store", "link": "https://w", "in_stock": True},
+        ]
+        m["fetch_item_ids_by_link"].return_value = {"https://w": 200}
+        m["fetch_edition_ids_by_item_id"].return_value = {200: 55}
+        m["insert_events"].return_value = [{"id": 10, "item_id": 200, "event_type": "New Item"}]
+        m["insert_email_log"].return_value = [{"id": 50, "user_id": "uid-a"}]
+        m["get_store_preferences_for_users"].return_value = {"uid-a": {"Enabled Store"}}
+        m["get_watchlist_for_users"].return_value = {
+            "uid-a": {"item_ids": set(), "edition_ids": {55}},
+        }
+
+        lf.check_for_updates()
+
+        m["send_email"].assert_called_once()
+        sent_body = m["send_email"].call_args[0][1]
+        self.assertIn("Watched Book UK", sent_body)
+
     def test_unwatched_disabled_store_item_not_sent(self):
         """An item from a disabled store that is NOT watched should be skipped."""
         m = self._patch_all()
@@ -495,7 +520,7 @@ class TestCheckForUpdates(unittest.TestCase):
         m["fetch_item_ids_by_link"].return_value = {"https://s": 77}
         m["insert_events"].return_value = [{"id": 10, "item_id": 77, "event_type": "New Item"}]
         m["get_store_preferences_for_users"].return_value = {"uid-a": {"Enabled Store"}}
-        m["get_watchlist_for_users"].return_value = {"uid-a": set()}
+        m["get_watchlist_for_users"].return_value = {"uid-a": {"item_ids": set(), "edition_ids": set()}}
 
         lf.check_for_updates()
 
