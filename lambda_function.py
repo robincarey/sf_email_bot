@@ -13,6 +13,7 @@ from open_library import lookup_author
 from silver_catalog import (
     build_retailer_listing_row,
     ensure_catalog_for_item,
+    resolve_work_author,
 )
 
 logger = logging.getLogger()
@@ -537,6 +538,7 @@ def check_for_updates(store_filter=None):
                 (r.get("author") for r in sorted_rows if r.get("author")),
                 None,
             )
+            canonical_author = resolve_work_author(canonical_name, canonical_author)
 
             item = {
                 "name": canonical_name,
@@ -605,7 +607,7 @@ def check_for_updates(store_filter=None):
     new_items_canonical = canonicalize_items_by_link(new_items, stores_by_link)
 
     def enrich_new_item_authors(items, seen_by_link):
-        """Open Library fallback for brand-new items missing store-scraped author."""
+        """Open Library fallback when the store page did not yield an author."""
         for item in items:
             if item.get("author") or item.get("link") in seen_by_link:
                 continue

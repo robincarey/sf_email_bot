@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
-import { eventBadgeColors, formatRelativeTime } from '../lib/eventUtils'
+import { eventBadgeColors, formatRelativeTime, isUserVisibleEventType } from '../lib/eventUtils'
 import {
   addToWatchlist,
   fetchWatchlistTargets,
@@ -34,6 +34,7 @@ export default function RecentAlerts({ onWatchlistChange }: RecentAlertsProps) {
       const { data, error } = await supabase
         .from('catalog_events')
         .select('id, item_id, edition_id, event_type, store, event_time, in_stock, old_value, new_value, name, author, link')
+        .neq('event_type', 'Unknown Change')
         .order('event_time', { ascending: false })
         .limit(20)
 
@@ -41,7 +42,7 @@ export default function RecentAlerts({ onWatchlistChange }: RecentAlertsProps) {
         console.error('Error fetching events:', error)
         setEvents([])
       } else {
-        setEvents((data ?? []) as CatalogEvent[])
+        setEvents(((data ?? []) as CatalogEvent[]).filter((e) => isUserVisibleEventType(e.event_type)))
       }
       setLoading(false)
     }

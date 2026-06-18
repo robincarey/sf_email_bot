@@ -26,6 +26,8 @@ MANUAL = {
     78: "Iain Banks",
     158: "Dave Rudden",
     109: "L. D. Lewis",
+    1169: "Adrian Tchaikovsky",
+    1170: "Ryan Rose",
 }
 
 GARBAGE_MARKERS = (

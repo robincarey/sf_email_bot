@@ -1,3 +1,10 @@
+/** Event types stored in item_events but hidden from feeds, analytics, and UI. */
+export const HIDDEN_EVENT_TYPES = ['Unknown Change'] as const
+
+export function isUserVisibleEventType(eventType: string): boolean {
+  return !(HIDDEN_EVENT_TYPES as readonly string[]).includes(eventType)
+}
+
 export const eventBadgeColors: Record<string, string> = {
   'New Item': 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
   'Restocked': 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',

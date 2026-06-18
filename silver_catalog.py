@@ -7,6 +7,20 @@ from datetime import datetime, timezone
 
 from open_library import normalize_text
 
+# Curated author corrections (normalized title -> author). Scraped/OL values must not win.
+WORK_AUTHOR_OVERRIDES_BY_NORM_TITLE: dict[str, str] = {
+    "green city wars": "Adrian Tchaikovsky",
+    "what we eat": "Ryan Rose",
+}
+
+
+def resolve_work_author(title: str | None, scraped_author: str | None = None) -> str | None:
+    for variant in title_lookup_variants(title):
+        norm = normalize_title(variant)
+        if norm and norm in WORK_AUTHOR_OVERRIDES_BY_NORM_TITLE:
+            return WORK_AUTHOR_OVERRIDES_BY_NORM_TITLE[norm]
+    return scraped_author
+
 _CLEAN_TITLE_PATTERNS = [
     r"\s*-\s*TBB Press Edition.*",
     r"\s*-\s*Slightly Damaged.*",
@@ -109,6 +123,7 @@ def find_work_id(sb, title: str, author: str | None = None):
 
 def ensure_work(sb, title: str, author: str | None = None, open_library_id: str | None = None):
     """Return work id, creating the work when missing."""
+    author = resolve_work_author(title, author)
     norm_title = normalize_title(title)
     if not norm_title:
         return None

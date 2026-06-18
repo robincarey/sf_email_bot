@@ -6,6 +6,35 @@ from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
+# Shopify vendor field is the retailer, not the book author on Broken Binding.
+_IGNORED_SHOPIFY_VENDORS = frozenset(
+    {
+        "the broken binding ltd.",
+        "the broken binding",
+        "broken binding",
+    }
+)
+
+
+def extract_product_author(product_soup) -> str | None:
+    """Author from Broken Binding Shopify product detail markup."""
+    el = product_soup.select_one("p.productInfo__author, .productInfo__author")
+    if not el:
+        return None
+    text = el.get_text(strip=True)
+    return text or None
+
+
+def author_from_shopify_json(product_data: dict) -> str | None:
+    """Best-effort author from product JSON (vendor is usually the store, not author)."""
+    vendor = (product_data.get("product") or {}).get("vendor")
+    if not vendor:
+        return None
+    normalized = vendor.strip().lower()
+    if normalized in _IGNORED_SHOPIFY_VENDORS:
+        return None
+    return vendor.strip()
+
 
 def _get_with_retry(session, url, max_retries=3, timeout=10):
     """GET with exponential backoff. Raises on final failure."""
@@ -85,12 +114,10 @@ def broken_binding_checks():
 
                         link = "https://thebrokenbindingsub.com" + href
                         # Check for subscriber-gated products before fetching HTML
+                        product_data = None
                         try:
                             json_response = _get_with_retry(session, link + ".json")
                             product_data = json_response.json()
-                            vendor = product_data.get("product", {}).get("vendor")
-                            if vendor and vendor.strip():
-                                author = vendor.strip()
                             tags = [t.strip() for t in product_data["product"]["tags"].split(",")]
                             if "Private Sale" in tags:
                                 logger.info(f"Skipping private sale product: {product_name}")
@@ -104,6 +131,9 @@ def broken_binding_checks():
                             logger.error(f"Error fetching product {link}: {e}")
                             continue
                         product_soup = BeautifulSoup(product_response.content, "html.parser")
+                        author = extract_product_author(product_soup)
+                        if not author and product_data:
+                            author = author_from_shopify_json(product_data)
                         cart_button = product_soup.find("button", class_="product-form__submit")
                         if not cart_button or "Sold out" in cart_button.get_text(strip=True):
                             in_stock = False
