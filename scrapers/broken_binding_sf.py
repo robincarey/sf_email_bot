@@ -74,6 +74,7 @@ def broken_binding_checks():
                     # Ensure these variables always exist even if the page structure changes.
                     in_stock = False
                     link = None
+                    author = None
                     heading = product.find("h3", class_="card__heading")
                     if heading:
                         link_tag = heading.find("a", class_="full-unstyled-link")
@@ -87,6 +88,9 @@ def broken_binding_checks():
                         try:
                             json_response = _get_with_retry(session, link + ".json")
                             product_data = json_response.json()
+                            vendor = product_data.get("product", {}).get("vendor")
+                            if vendor and vendor.strip():
+                                author = vendor.strip()
                             tags = [t.strip() for t in product_data["product"]["tags"].split(",")]
                             if "Private Sale" in tags:
                                 logger.info(f"Skipping private sale product: {product_name}")
@@ -122,7 +126,8 @@ def broken_binding_checks():
                         'price': product_price,
                         'store': store,
                         'link': link,
-                        'in_stock': in_stock
+                        'in_stock': in_stock,
+                        'author': author,
                     })
 
                     time.sleep(random.uniform(0.2, 0.6))

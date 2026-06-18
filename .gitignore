@@ -16,3 +16,4 @@ supabase/*
 # Frontend
 frontend/.env
 .env
+out/

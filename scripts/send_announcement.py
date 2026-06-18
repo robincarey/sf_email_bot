@@ -107,18 +107,24 @@ def insert_email_logs(supabase, log_rows):
     supabase.table("email_log").insert(log_rows).execute()
 
 
+SES_CONFIGURATION_SET = os.getenv("SES_CONFIGURATION_SET")
+
+
 def send_one_email(ses_client, to_email, subject, html_body, text_body):
-    ses_client.send_email(
-        Source=SES_FROM_ADDRESS,
-        Destination={"ToAddresses": [to_email]},
-        Message={
+    kwargs = {
+        "Source": SES_FROM_ADDRESS,
+        "Destination": {"ToAddresses": [to_email]},
+        "Message": {
             "Subject": {"Data": subject, "Charset": "UTF-8"},
             "Body": {
                 "Html": {"Data": html_body, "Charset": "UTF-8"},
                 "Text": {"Data": text_body, "Charset": "UTF-8"},
             },
         },
-    )
+    }
+    if SES_CONFIGURATION_SET:
+        kwargs["ConfigurationSetName"] = SES_CONFIGURATION_SET
+    ses_client.send_email(**kwargs)
 
 
 def render_unsubscribe_html(html_body, unsubscribe_url):

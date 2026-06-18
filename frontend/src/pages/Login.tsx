@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { validateEmailAddress } from '../lib/emailValidation'
 import { useAuth } from '../context/AuthContext'
 
 /** Only allow in-app paths so magic-link ?next= is not an open redirect. */
@@ -33,6 +34,13 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+
+    const emailError = validateEmailAddress(email)
+    if (emailError) {
+      setError(emailError)
+      return
+    }
+
     setSubmitting(true)
 
     // Redirect to /login (not /app) so tokens (?code= or #access_token) are not

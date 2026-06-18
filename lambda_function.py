@@ -9,6 +9,7 @@ from supabase import create_client
 from scrapers.broken_binding_sf import broken_binding_checks
 from scrapers.folio_society_sf import folio_society_checks
 from email_notifier import send_email
+from open_library import lookup_author
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -66,7 +67,7 @@ def parse_price_cents(price_str):
 def is_emailable_change(item):
     """Return True if this changed item should trigger an alert email."""
     event_type = item.get("event_type")
-    if event_type == "Unknown Change":
+    if event_type == "Unknown Change" or event_type == "Store Change":
         return False
     if event_type == "Price Change":
         old_cents = parse_price_cents(item.get("old_value"))
@@ -170,7 +171,7 @@ def load_seen_items(run_id):
         response = (
             get_supabase()
             .table("items_seen")
-            .select("name, price, store, link, in_stock")
+            .select("name, price, store, link, in_stock, author")
             .execute()
         )
         items = response.data or []
@@ -491,13 +492,21 @@ def check_for_updates(store_filter=None):
             if canonical_name is None:
                 canonical_name = rows[0].get("name")
 
-            canonical.append({
+            canonical_author = next(
+                (r.get("author") for r in sorted_rows if r.get("author")),
+                None,
+            )
+
+            item = {
                 "name": canonical_name,
                 "price": canonical_price,
                 "store": canonical_store,
                 "link": link,
                 "in_stock": canonical_in_stock,
-            })
+            }
+            if canonical_author:
+                item["author"] = canonical_author
+            canonical.append(item)
 
         return canonical
 
@@ -553,6 +562,27 @@ def check_for_updates(store_filter=None):
         stores_by_link.setdefault(link, set()).add(store)
 
     new_items_canonical = canonicalize_items_by_link(new_items, stores_by_link)
+
+    def enrich_new_item_authors(items, seen_by_link):
+        """Open Library fallback for brand-new items missing store-scraped author."""
+        for item in items:
+            if item.get("author") or item.get("link") in seen_by_link:
+                continue
+            try:
+                result = lookup_author(item.get("name") or "")
+                if result and result.get("author"):
+                    item["author"] = result["author"]
+                    logger.info(
+                        f"[{run_id}] OL author for new item '{item.get('name')}': "
+                        f"{result['author']}"
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"[{run_id}] Open Library lookup failed for '{item.get('name')}': {e}"
+                )
+
+    if not is_seed_mode:
+        enrich_new_item_authors(new_items_canonical, seen_items_dict)
 
     # Seed mode: establish baseline catalog + daily snapshots, but do not generate events.
     if is_seed_mode:

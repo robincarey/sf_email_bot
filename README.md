@@ -109,6 +109,7 @@ npm install
 | `SUPABASE_KEY` | Supabase service-role key (bypasses RLS) |
 | `AWS_SES_REGION` | AWS region where SES is configured (e.g. `us-east-1`) |
 | `SES_FROM_ADDRESS` | Verified SES sender address (must match SES configuration) |
+| `SES_CONFIGURATION_SET` | SES configuration set name (e.g. `sf-bot-notifications`) for delivery/bounce tracking |
 | `RUN_MODE` | `prod` (default) or `dev` |
 | `SEED_MODE` | set to `true` (or `1`) to run baseline catalog seeding (`run_log.status="seed"`) without generating `item_events` or sending emails |
 | `ADMIN_EMAILS` | JSON array of emails for dev-mode testing, e.g. `'["you@example.com"]'` |
@@ -127,7 +128,19 @@ Ensure the **Lambda IAM role** attached to the function includes `ses:SendEmail`
 Apply the SQL migrations in order via the Supabase SQL Editor or Supabase CLI, including:
 
 - `supabase/migrations/001_profiles_and_preferences.sql` — profiles, `user_store_preferences`, triggers, RLS
-- Subsequent migrations as needed for your project (e.g. contact form, watchlist, **`004_folio_society_store.sql`** for the Folio Society store preference)
+- Subsequent migrations as needed for your project (e.g. contact form, watchlist, **`004_folio_society_store.sql`** for the Folio Society store preference, **`011_email_suppression.sql`** for bounce/complaint suppression)
+
+### SES bounce and complaint handling
+
+Stock alerts and announcements use the SES configuration set `SES_CONFIGURATION_SET` (e.g. `sf-bot-notifications`). In **SES → Configuration sets → Event destinations**, ensure the SNS topic subscribed by the `sff_stock_engagement` Lambda publishes **Bounce**, **Complaint**, **Click**, and **Open** events.
+
+When a hard bounce or spam complaint arrives, `engagement_lambda.py` will:
+
+1. Log the event in `email_engagement_events` with `delivery_metadata`
+2. Mark the matching `email_log` row as failed
+3. Set `pause_all_alerts = true` on the user's profile (with `email_suppressed_at` / `email_suppressed_reason`)
+
+Transient bounces are logged but do not suppress alerts unless the diagnostic indicates an invalid address (e.g. `5.4.4 Invalid domain`). Users can fix a typo and re-enable alerts in Preferences.
 
 ### Migrate existing users
 

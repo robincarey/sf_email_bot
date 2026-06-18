@@ -92,6 +92,7 @@ def folio_society_checks():
                     "store": STORE_NAME,
                     "link": link,
                     "in_stock": _extract_in_stock(product),
+                    "author": None,
                 }
             )
 

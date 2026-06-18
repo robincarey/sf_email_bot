@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { validateEmailAddress } from '../lib/emailValidation'
 import { useAuth } from '../context/AuthContext'
 
 export default function Account() {
@@ -15,6 +16,13 @@ export default function Account() {
   const handleChangeEmail = async (e: React.FormEvent) => {
     e.preventDefault()
     setEmailMessage(null)
+
+    const emailError = validateEmailAddress(newEmail)
+    if (emailError) {
+      setEmailMessage({ type: 'error', text: emailError })
+      return
+    }
+
     setEmailSaving(true)
 
     const { error } = await supabase.auth.updateUser(
