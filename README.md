@@ -14,7 +14,7 @@ A **frontend dashboard** (Vite + React) lets users sign up, manage per-store ale
 
 - **Multi-store scraping** with retry logic and exponential backoff (Broken Binding + Folio Society)
 - **Change detection** — new items, restocks, out-of-stock, price changes, store changes
-- **Canonical per-link store handling** — if the same Broken Binding product URL appears in multiple collections during one run, the bot picks a deterministic canonical store per `items_seen.link` to prevent noisy `Store Change` events, while still matching emails to users who enabled any store the item appeared in.
+- **Canonical per-link store handling** — if the same Broken Binding product URL appears in multiple collections during one run, the bot picks a deterministic canonical store per listing URL to prevent noisy `Store Change` events, while still matching emails to users who enabled any store the item appeared in.
 - **Per-event logging** — every detected change is recorded in `item_events` with a run-level UUID for traceability
 - **Per-recipient email tracking** — `email_log` records delivery success/failure per user, linked to events via `email_log_events`
 - **Per-store preferences** — users choose which stores they receive alerts for (Folio is added in migration `004`; new users default with Folio off until they opt in)
@@ -37,8 +37,11 @@ EventBridge (schedule)
        └─ Supabase (PostgreSQL)
             ├─ profiles                — user accounts (linked to Supabase Auth)
             ├─ user_store_preferences  — per-user per-store notification toggles
-            ├─ items_seen              — canonical item catalog
+            ├─ works / editions / retailer_listings — Silver catalog
+            ├─ catalog_* views         — Gold read marts (listings, events, analytics)
+            ├─ items_seen              — Bronze scrape lineage (event FKs)
             ├─ item_events             — change history per item
+            ├─ watchlist               — user-tracked editions
             ├─ item_status_daily       — daily price/stock snapshots
             ├─ email_log               — one row per email sent
             ├─ email_log_events        — junction: email ↔ events
@@ -209,11 +212,15 @@ Enable the **Magic Link** provider under **Auth > Providers**.
 
 ## Database schema
 
-| Table | Purpose |
+| Table / view | Purpose |
 |---|---|
 | `profiles` | User accounts linked to Supabase Auth, with `is_active` and `pause_all_alerts` |
 | `user_store_preferences` | Per-user per-store notification toggles (Broken Binding collections + Folio Society) |
-| `items_seen` | Canonical item catalog; upserted on every scrape |
+| `works`, `editions`, `retailer_listings` | Silver catalog (canonical titles, editions, store listings) |
+| `catalog_listings`, `catalog_events`, `catalog_restock_feed` | Gold read views for app UI |
+| `analytics_*` views | Gold analytics marts |
+| `watchlist` | User-tracked `edition_id` rows |
+| `items_seen` | Bronze scrape lineage; backs `item_events.item_id` foreign keys |
 | `item_events` | One row per detected change (restock, price change, etc.) |
 | `item_status_daily` | Daily snapshots of item price/stock status |
 | `email_log` | One row per email sent, with success/failure and error message |

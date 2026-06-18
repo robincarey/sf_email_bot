@@ -138,15 +138,15 @@ def handle_click_open(message, event_type):
 
     item_id = None
     if url_clicked:
-        item = (
-            supabase.table('items_seen')
-            .select('id')
-            .eq('link', url_clicked)
+        listing = (
+            supabase.table('retailer_listings')
+            .select('items_seen_id')
+            .eq('retailer_url', url_clicked)
             .maybe_single()
             .execute()
         )
-        if item.data:
-            item_id = item.data['id']
+        if listing.data:
+            item_id = listing.data['items_seen_id']
 
     log_delivery_event(
         ses_message_id, email_log_id, user_id, event_type, event_timestamp,

@@ -20,7 +20,6 @@ export default function RecentAlerts({ onWatchlistChange }: RecentAlertsProps) {
   const [events, setEvents] = useState<CatalogEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [watchlistTargets, setWatchlistTargets] = useState<WatchlistTargets>({
-    itemIds: new Set(),
     editionIds: new Set(),
   })
   const [togglingId, setTogglingId] = useState<number | null>(null)
@@ -50,29 +49,24 @@ export default function RecentAlerts({ onWatchlistChange }: RecentAlertsProps) {
     fetchWatchlist()
   }, [fetchWatchlist])
 
-  const toggleWatch = async (itemId: number, editionId: number | null) => {
+  const toggleWatch = async (editionId: number) => {
     if (!user) return
-    setTogglingId(itemId)
-    const watched = isItemWatched(itemId, editionId, watchlistTargets)
+    setTogglingId(editionId)
+    const watched = isItemWatched(editionId, watchlistTargets)
 
     try {
       if (watched) {
-        await removeFromWatchlist(user.id, itemId, editionId)
+        await removeFromWatchlist(user.id, editionId)
         setWatchlistTargets((prev) => {
-          const itemIds = new Set(prev.itemIds)
           const editionIds = new Set(prev.editionIds)
-          itemIds.delete(itemId)
-          if (editionId != null) editionIds.delete(editionId)
-          return { itemIds, editionIds }
+          editionIds.delete(editionId)
+          return { editionIds }
         })
       } else {
-        await addToWatchlist(user.id, itemId)
-        setWatchlistTargets((prev) => {
-          const itemIds = new Set(prev.itemIds).add(itemId)
-          const editionIds = new Set(prev.editionIds)
-          if (editionId != null) editionIds.add(editionId)
-          return { itemIds, editionIds }
-        })
+        await addToWatchlist(user.id, editionId)
+        setWatchlistTargets((prev) => ({
+          editionIds: new Set(prev.editionIds).add(editionId),
+        }))
       }
     } catch (err) {
       console.error('Error toggling watchlist:', err)
@@ -114,13 +108,13 @@ export default function RecentAlerts({ onWatchlistChange }: RecentAlertsProps) {
         </thead>
         <tbody>
           {events.map((evt) => {
-            const watched = isItemWatched(evt.item_id, evt.edition_id, watchlistTargets)
+            const watched = isItemWatched(evt.edition_id, watchlistTargets)
             return (
             <tr key={evt.id} className="border-b border-border last:border-0">
               <td className="py-3 pr-2">
                 <button
-                  onClick={() => toggleWatch(evt.item_id, evt.edition_id)}
-                  disabled={togglingId === evt.item_id}
+                  onClick={() => toggleWatch(evt.edition_id)}
+                  disabled={togglingId === evt.edition_id}
                   className="text-lg leading-none cursor-pointer disabled:opacity-50 hover:scale-110 transition-transform"
                   title={watched ? 'Remove from watchlist' : 'Add to watchlist'}
                 >

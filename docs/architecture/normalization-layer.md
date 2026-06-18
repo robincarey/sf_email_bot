@@ -51,9 +51,12 @@ live production app with approximately 180 users.
 
 **Read-path views** (migration `015_catalog_read_views.sql`):
 
-- `catalog_listings` — item browser (replaces direct `items_seen` reads)
+- `catalog_listings` — item browser
 - `catalog_events` — alert feed with canonical title/author
 - `catalog_restock_feed` — public landing restock feed
+
+The frontend and lambda diff pipeline read from these Gold views. `items_seen`
+remains as Bronze lineage for `item_events` foreign keys only.
 
 ## Silver quality gate (promotion criteria)
 

@@ -7,8 +7,7 @@ import type { CatalogListing } from '../lib/catalog'
 
 interface WatchlistItem {
   id: string
-  item_id: number
-  edition_id: number | null
+  edition_id: number
   catalog: CatalogListing | null
 }
 
@@ -45,7 +44,7 @@ export default function Dashboard() {
     if (!user) return
     const { data: rows, error } = await supabase
       .from('watchlist')
-      .select('id, item_id, edition_id')
+      .select('id, edition_id')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
@@ -55,27 +54,32 @@ export default function Dashboard() {
       return
     }
 
-    const itemIds = (rows ?? []).map((r) => r.item_id)
-    let catalogById = new Map<number, CatalogListing>()
-    if (itemIds.length > 0) {
+    const editionIds = (rows ?? []).map((r) => r.edition_id)
+    let catalogByEdition = new Map<number, CatalogListing>()
+    if (editionIds.length > 0) {
       const { data: catalog, error: catalogError } = await supabase
         .from('catalog_listings')
-        .select('id, edition_id, name, link, store, price, in_stock, last_in_stock')
-        .in('id', itemIds)
+        .select('edition_id, name, link, store, price, in_stock, last_in_stock')
+        .in('edition_id', editionIds)
 
       if (catalogError) {
         console.error('Error fetching catalog listings:', catalogError)
       } else {
-        catalogById = new Map((catalog ?? []).map((row) => [row.id as number, row as CatalogListing]))
+        for (const row of catalog ?? []) {
+          const editionId = row.edition_id as number
+          const existing = catalogByEdition.get(editionId)
+          if (!existing || (row.in_stock && !existing.in_stock)) {
+            catalogByEdition.set(editionId, row as CatalogListing)
+          }
+        }
       }
     }
 
     setWatchlist(
       (rows ?? []).map((row) => ({
         id: row.id,
-        item_id: row.item_id,
         edition_id: row.edition_id,
-        catalog: catalogById.get(row.item_id) ?? null,
+        catalog: catalogByEdition.get(row.edition_id) ?? null,
       })),
     )
     setLoadingWatchlist(false)

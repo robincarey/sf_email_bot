@@ -147,14 +147,14 @@ def get_store_preferences_for_users(user_ids, run_id):
 
 
 def get_watchlist_for_users(user_ids, run_id):
-    """Return {user_id: {"item_ids": set(), "edition_ids": set()}} for watched items."""
+    """Return {user_id: set(edition_ids)} for watched editions."""
     if not user_ids:
         return {}
     try:
         resp = (
             get_supabase()
             .table("watchlist")
-            .select("user_id, item_id, edition_id")
+            .select("user_id, edition_id")
             .in_("user_id", list(user_ids))
             .execute()
         )
@@ -162,69 +162,83 @@ def get_watchlist_for_users(user_ids, run_id):
         for row in (resp.data or []):
             uid = row["user_id"]
             if uid not in result:
-                result[uid] = {"item_ids": set(), "edition_ids": set()}
-            if row.get("item_id") is not None:
-                result[uid]["item_ids"].add(row["item_id"])
+                result[uid] = set()
             if row.get("edition_id") is not None:
-                result[uid]["edition_ids"].add(row["edition_id"])
+                result[uid].add(row["edition_id"])
         return result
     except Exception as e:
         logger.error(f"[{run_id}] Error loading watchlist: {e}")
         return {}
 
 
-def fetch_edition_ids_by_item_id(item_ids, run_id):
-    """Return {items_seen_id: edition_id} for retailer listings."""
-    if not item_ids:
+def fetch_edition_ids_by_link(links, run_id):
+    """Return {retailer_url: edition_id} for retailer listings."""
+    if not links:
         return {}
     try:
         resp = (
             get_supabase()
             .table("retailer_listings")
-            .select("items_seen_id, edition_id")
-            .in_("items_seen_id", list(item_ids))
+            .select("retailer_url, edition_id")
+            .in_("retailer_url", list(links))
             .execute()
         )
         return {
-            r["items_seen_id"]: r["edition_id"]
+            r["retailer_url"]: r["edition_id"]
             for r in (resp.data or [])
-            if r.get("items_seen_id") and r.get("edition_id")
+            if r.get("retailer_url") and r.get("edition_id")
         }
     except Exception as e:
-        logger.error(f"[{run_id}] Error loading edition ids: {e}")
+        logger.error(f"[{run_id}] Error loading edition ids by link: {e}")
         return {}
 
 
-def load_seen_items(run_id):
+def load_catalog_state(run_id):
+    """Load current catalog snapshot for diffing (Gold read view)."""
     try:
         response = (
             get_supabase()
-            .table("items_seen")
+            .table("catalog_listings")
             .select("name, price, store, link, in_stock, author")
             .execute()
         )
         items = response.data or []
-        logger.info(f"[{run_id}] Loaded {len(items)} seen items from Supabase.")
+        logger.info(f"[{run_id}] Loaded {len(items)} catalog listings for diff.")
         return items
     except Exception as e:
-        logger.error(f"[{run_id}] Error loading seen items from Supabase: {e}")
+        logger.error(f"[{run_id}] Error loading catalog state: {e}")
         return []
 
 
-def save_seen_items(items, run_id):
+def save_bronze_items(items, run_id):
+    """Upsert Bronze items_seen rows (event/snapshot foreign keys)."""
     if not items:
         return
     try:
         get_supabase().table("items_seen").upsert(items, on_conflict="link").execute()
-        logger.info(f"[{run_id}] Upserted {len(items)} items into items_seen.")
+        logger.info(f"[{run_id}] Upserted {len(items)} rows into items_seen (bronze).")
     except Exception as e:
-        logger.error(f"[{run_id}] Error saving to Supabase: {e}")
+        logger.error(f"[{run_id}] Error saving bronze items: {e}")
+
+
+def persist_catalog(items, run_id):
+    """
+    Write scrape results to Bronze (items_seen) and Silver (retailer_listings).
+    Returns {link: items_seen_id} for event and snapshot writes.
+    """
+    if not items:
+        return {}
+    save_bronze_items(items, run_id)
+    links = [item["link"] for item in items if item.get("link")]
+    link_to_id = fetch_item_ids_by_link(links, run_id)
+    upsert_retailer_listings(items, link_to_id, run_id)
+    return link_to_id
 
 
 def upsert_retailer_listings(items, link_to_id, run_id):
     """
-    Dual-write items into the Silver layer alongside `items_seen`.
-    Creates missing works/editions when needed, then upserts retailer_listings.
+    Upsert Silver retailer_listings for scraped items.
+    Creates missing works/editions when needed.
     Must never raise: failures are logged and swallowed.
     """
     if not items:
@@ -518,7 +532,7 @@ def check_for_updates(store_filter=None):
         seen_items_dict = {}
     else:
         recipients = get_recipients_for_run(run_id)
-        seen_items = load_seen_items(run_id)
+        seen_items = load_catalog_state(run_id)
         seen_items_dict = {
             item['link']: {k: v for k, v in item.items() if k != 'link'}
             for item in seen_items
@@ -589,10 +603,7 @@ def check_for_updates(store_filter=None):
         for item in new_items_canonical:
             item["typed_price_cents"] = parse_price_cents(item.get("price"))
 
-        save_seen_items(new_items_canonical, run_id)
-
-        all_links = [item["link"] for item in new_items_canonical]
-        all_link_to_id = fetch_item_ids_by_link(all_links, run_id)
+        all_link_to_id = persist_catalog(new_items_canonical, run_id)
 
         # Daily snapshots are idempotent per day via unique(snapshot_date, item_id).
         insert_daily_snapshots(new_items_canonical, all_link_to_id, run_id)
@@ -672,19 +683,12 @@ def check_for_updates(store_filter=None):
         item["typed_price_cents"] = parse_price_cents(item.get("price"))
 
     if not dry_run:
-        # Step 1: Upsert items_seen so IDs exist for new items
-        save_seen_items(new_items_canonical, run_id)
-
-    # Step 2: Fetch IDs for ALL items (needed for daily snapshots + changed-item events)
-    all_links = [item["link"] for item in new_items_canonical]
-    all_link_to_id = fetch_item_ids_by_link(all_links, run_id)
+        all_link_to_id = persist_catalog(new_items_canonical, run_id)
+    else:
+        all_links = [item["link"] for item in new_items_canonical]
+        all_link_to_id = fetch_item_ids_by_link(all_links, run_id)
 
     if not dry_run:
-        # Step 3a: Silver dual-write into retailer_listings. Uses the same
-        # all_link_to_id map to populate the items_seen_id lineage column.
-        upsert_retailer_listings(new_items_canonical, all_link_to_id, run_id)
-
-        # Step 3b: Insert daily snapshots (idempotent per day)
         insert_daily_snapshots(new_items_canonical, all_link_to_id, run_id)
 
     # Step 4: Fetch IDs for changed items only (subset for event building)
@@ -730,12 +734,10 @@ def check_for_updates(store_filter=None):
     store_prefs = get_store_preferences_for_users(user_ids, run_id)
     user_watchlists = get_watchlist_for_users(user_ids, run_id)
 
-    email_item_ids = {
-        link_to_id[i["link"]]
-        for i in items_to_email
-        if link_to_id.get(i["link"])
-    }
-    edition_by_item = fetch_edition_ids_by_item_id(email_item_ids, run_id)
+    edition_by_link = fetch_edition_ids_by_link(
+        [i["link"] for i in items_to_email if i.get("link")],
+        run_id,
+    )
 
     email_subject = "SFF Stock Alert - New Books Available!"
 
@@ -744,16 +746,13 @@ def check_for_updates(store_filter=None):
 
     for recip in recipients:
         enabled_stores = store_prefs.get(recip["id"])
-        watched = user_watchlists.get(recip["id"], {"item_ids": set(), "edition_ids": set()})
-        watched_item_ids = watched.get("item_ids", set())
-        watched_edition_ids = watched.get("edition_ids", set())
+        watched_edition_ids = user_watchlists.get(recip["id"], set())
 
         if enabled_stores is not None:
             recip_items = [
                 i for i in items_to_email
                 if stores_by_link.get(i["link"], set()).intersection(enabled_stores)
-                or link_to_id.get(i["link"]) in watched_item_ids
-                or edition_by_item.get(link_to_id.get(i["link"])) in watched_edition_ids
+                or edition_by_link.get(i["link"]) in watched_edition_ids
             ]
         else:
             recip_items = items_to_email

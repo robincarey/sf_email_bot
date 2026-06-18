@@ -59,8 +59,9 @@ class TestIsEmailableChange(unittest.TestCase):
         self.assertTrue(lf.is_emailable_change(item))
 
     def test_other_event_types_are_emailable(self):
-        for event_type in ("New Item", "Restocked", "Store Change"):
+        for event_type in ("New Item", "Restocked"):
             self.assertTrue(lf.is_emailable_change({"event_type": event_type}))
+        self.assertFalse(lf.is_emailable_change({"event_type": "Store Change"}))
 
 
 class TestGetRecipientsForRun(unittest.TestCase):
@@ -114,7 +115,7 @@ class TestGetRecipientsForRun(unittest.TestCase):
         self.assertEqual(result, [{"id": None, "email": "dev@test.com"}])
 
 
-class TestLoadSeenItems(unittest.TestCase):
+class TestLoadCatalogState(unittest.TestCase):
 
     @patch.object(lf, "get_supabase")
     def test_success(self, mock_get_sb):
@@ -126,7 +127,7 @@ class TestLoadSeenItems(unittest.TestCase):
         ]
         mock_sb.table.return_value.select.return_value.execute.return_value = mock_resp
 
-        items = lf.load_seen_items("test-run-id")
+        items = lf.load_catalog_state("test-run-id")
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]["name"], "Book A")
 
@@ -135,7 +136,7 @@ class TestLoadSeenItems(unittest.TestCase):
         mock_sb = MagicMock()
         mock_get_sb.return_value = mock_sb
         mock_sb.table.return_value.select.return_value.execute.side_effect = Exception("boom")
-        items = lf.load_seen_items("test-run-id")
+        items = lf.load_catalog_state("test-run-id")
         self.assertEqual(items, [])
 
 
@@ -150,11 +151,11 @@ class TestCheckForUpdates(unittest.TestCase):
             "get_recipients_for_run": patch.object(lf, "get_recipients_for_run"),
             "get_store_preferences_for_users": patch.object(lf, "get_store_preferences_for_users"),
             "get_watchlist_for_users": patch.object(lf, "get_watchlist_for_users"),
-            "fetch_edition_ids_by_item_id": patch.object(lf, "fetch_edition_ids_by_item_id"),
-            "load_seen_items": patch.object(lf, "load_seen_items"),
+            "fetch_edition_ids_by_link": patch.object(lf, "fetch_edition_ids_by_link"),
+            "load_catalog_state": patch.object(lf, "load_catalog_state"),
             "broken_binding_checks": patch.object(lf, "broken_binding_checks"),
             "send_email": patch("lambda_function.send_email"),
-            "save_seen_items": patch.object(lf, "save_seen_items"),
+            "persist_catalog": patch.object(lf, "persist_catalog"),
             "fetch_item_ids_by_link": patch.object(lf, "fetch_item_ids_by_link"),
             "insert_events": patch.object(lf, "insert_events"),
             "insert_email_log": patch.object(lf, "insert_email_log"),
@@ -185,9 +186,15 @@ class TestCheckForUpdates(unittest.TestCase):
         mocks["insert_email_log"].return_value = []
         mocks["get_store_preferences_for_users"].return_value = {}
         mocks["get_watchlist_for_users"].return_value = {}
-        mocks["fetch_edition_ids_by_item_id"].return_value = {}
+        mocks["fetch_edition_ids_by_link"].return_value = {}
         mocks["store_checks"]["Broken Binding"].return_value = []
         mocks["store_checks"]["Folio Society - Sci-Fi & Fantasy"].return_value = []
+
+        def persist_side_effect(items, run_id):
+            links = [item["link"] for item in items if item.get("link")]
+            return mocks["fetch_item_ids_by_link"](links, run_id)
+
+        mocks["persist_catalog"].side_effect = persist_side_effect
         return mocks
 
     def _recip(self, email, uid=None):
@@ -197,7 +204,7 @@ class TestCheckForUpdates(unittest.TestCase):
     def test_new_item_sends_email_and_logs_events(self):
         m = self._patch_all()
         m["get_recipients_for_run"].return_value = [self._recip("a@test.com", "uid-a")]
-        m["load_seen_items"].return_value = [
+        m["load_catalog_state"].return_value = [
             {"name": "Old Book", "price": "$10", "store": "UK", "link": "https://old", "in_stock": True},
         ]
         m["broken_binding_checks"].return_value = [
@@ -210,7 +217,7 @@ class TestCheckForUpdates(unittest.TestCase):
 
         lf.check_for_updates()
 
-        m["save_seen_items"].assert_called_once()
+        m["persist_catalog"].assert_called_once()
         m["send_email"].assert_called_once()
         m["insert_events"].assert_called_once()
         m["insert_email_log"].assert_called_once()
@@ -242,20 +249,20 @@ class TestCheckForUpdates(unittest.TestCase):
         items = [
             {"name": "Same Book", "price": "$10", "store": "UK", "link": "https://same", "in_stock": True},
         ]
-        m["load_seen_items"].return_value = items
+        m["load_catalog_state"].return_value = items
         m["broken_binding_checks"].return_value = items
         m["fetch_item_ids_by_link"].return_value = {"https://same": 1}
 
         lf.check_for_updates()
 
         m["send_email"].assert_not_called()
-        m["save_seen_items"].assert_called_once()
+        m["persist_catalog"].assert_called_once()
         m["insert_daily_snapshots"].assert_called_once()
 
     def test_price_change_includes_store_and_in_stock(self):
         m = self._patch_all()
         m["get_recipients_for_run"].return_value = [self._recip("a@test.com")]
-        m["load_seen_items"].return_value = [
+        m["load_catalog_state"].return_value = [
             {"name": "Book A", "price": "$10", "store": "UK", "link": "https://a", "in_stock": True},
         ]
         m["broken_binding_checks"].return_value = [
@@ -278,7 +285,7 @@ class TestCheckForUpdates(unittest.TestCase):
     def test_small_price_change_does_not_email(self):
         m = self._patch_all()
         m["get_recipients_for_run"].return_value = [self._recip("a@test.com")]
-        m["load_seen_items"].return_value = [
+        m["load_catalog_state"].return_value = [
             {"name": "Book A", "price": "$10.00", "store": "UK", "link": "https://a", "in_stock": True},
         ]
         m["broken_binding_checks"].return_value = [
@@ -296,7 +303,7 @@ class TestCheckForUpdates(unittest.TestCase):
     def test_unknown_change_does_not_email(self):
         m = self._patch_all()
         m["get_recipients_for_run"].return_value = [self._recip("a@test.com")]
-        m["load_seen_items"].return_value = [
+        m["load_catalog_state"].return_value = [
             {"name": "Old Title", "price": "$10", "store": "UK", "link": "https://a", "in_stock": True},
         ]
         m["broken_binding_checks"].return_value = [
@@ -314,7 +321,7 @@ class TestCheckForUpdates(unittest.TestCase):
     def test_restock_event(self):
         m = self._patch_all()
         m["get_recipients_for_run"].return_value = [self._recip("a@test.com")]
-        m["load_seen_items"].return_value = [
+        m["load_catalog_state"].return_value = [
             {"name": "Book A", "price": "$10", "store": "UK", "link": "https://a", "in_stock": False},
         ]
         m["broken_binding_checks"].return_value = [
@@ -333,7 +340,7 @@ class TestCheckForUpdates(unittest.TestCase):
     def test_out_of_stock_does_not_email(self):
         m = self._patch_all()
         m["get_recipients_for_run"].return_value = [self._recip("a@test.com")]
-        m["load_seen_items"].return_value = [
+        m["load_catalog_state"].return_value = [
             {"name": "Book A", "price": "$10", "store": "UK", "link": "https://a", "in_stock": True},
         ]
         m["broken_binding_checks"].return_value = [
@@ -352,14 +359,14 @@ class TestCheckForUpdates(unittest.TestCase):
     def test_empty_scraper_skips_all(self):
         m = self._patch_all()
         m["get_recipients_for_run"].return_value = [self._recip("a@test.com")]
-        m["load_seen_items"].return_value = [
+        m["load_catalog_state"].return_value = [
             {"name": "Book", "price": "$10", "store": "UK", "link": "https://x", "in_stock": True},
         ]
         m["broken_binding_checks"].return_value = []
 
         lf.check_for_updates()
 
-        m["save_seen_items"].assert_not_called()
+        m["persist_catalog"].assert_not_called()
         m["send_email"].assert_not_called()
         m["insert_events"].assert_not_called()
         m["insert_email_log"].assert_not_called()
@@ -370,7 +377,7 @@ class TestCheckForUpdates(unittest.TestCase):
     def test_run_log_called_at_start_and_end(self):
         m = self._patch_all()
         m["get_recipients_for_run"].return_value = [self._recip("a@test.com", "uid-a")]
-        m["load_seen_items"].return_value = []
+        m["load_catalog_state"].return_value = []
         m["broken_binding_checks"].return_value = [
             {"name": "Book", "price": "$10", "store": "UK", "link": "https://x", "in_stock": True},
         ]
@@ -392,7 +399,7 @@ class TestCheckForUpdates(unittest.TestCase):
     def test_daily_snapshots_called_with_all_items(self):
         m = self._patch_all()
         m["get_recipients_for_run"].return_value = [self._recip("a@test.com")]
-        m["load_seen_items"].return_value = [
+        m["load_catalog_state"].return_value = [
             {"name": "Old Book", "price": "$10", "store": "UK", "link": "https://old", "in_stock": True},
         ]
         m["broken_binding_checks"].return_value = [
@@ -414,7 +421,7 @@ class TestCheckForUpdates(unittest.TestCase):
     def test_typed_price_attached_before_upsert(self):
         m = self._patch_all()
         m["get_recipients_for_run"].return_value = []
-        m["load_seen_items"].return_value = []
+        m["load_catalog_state"].return_value = []
         m["broken_binding_checks"].return_value = [
             {"name": "Book", "price": "$10.99", "store": "UK", "link": "https://x", "in_stock": True},
         ]
@@ -422,13 +429,13 @@ class TestCheckForUpdates(unittest.TestCase):
 
         lf.check_for_updates()
 
-        saved_items = m["save_seen_items"].call_args[0][0]
+        saved_items = m["persist_catalog"].call_args[0][0]
         self.assertEqual(saved_items[0]["typed_price_cents"], 1099)
 
     def test_email_failure_logged_with_error(self):
         m = self._patch_all()
         m["get_recipients_for_run"].return_value = [self._recip("a@test.com", "uid-a")]
-        m["load_seen_items"].return_value = []
+        m["load_catalog_state"].return_value = []
         m["broken_binding_checks"].return_value = [
             {"name": "Book", "price": "$10", "store": "UK", "link": "https://x", "in_stock": True},
         ]
@@ -452,7 +459,7 @@ class TestCheckForUpdates(unittest.TestCase):
         """A watched item from a disabled store should still be emailed."""
         m = self._patch_all()
         m["get_recipients_for_run"].return_value = [self._recip("a@test.com", "uid-a")]
-        m["load_seen_items"].return_value = []
+        m["load_catalog_state"].return_value = []
         m["broken_binding_checks"].return_value = [
             {"name": "Watched Book", "price": "$10", "store": "Disabled Store", "link": "https://w", "in_stock": True},
         ]
@@ -460,7 +467,8 @@ class TestCheckForUpdates(unittest.TestCase):
         m["insert_events"].return_value = [{"id": 10, "item_id": 99, "event_type": "New Item"}]
         m["insert_email_log"].return_value = [{"id": 50, "user_id": "uid-a"}]
         m["get_store_preferences_for_users"].return_value = {"uid-a": {"Enabled Store"}}
-        m["get_watchlist_for_users"].return_value = {"uid-a": {"item_ids": {99}, "edition_ids": set()}}
+        m["fetch_edition_ids_by_link"].return_value = {"https://w": 99}
+        m["get_watchlist_for_users"].return_value = {"uid-a": {99}}
 
         lf.check_for_updates()
 
@@ -472,7 +480,7 @@ class TestCheckForUpdates(unittest.TestCase):
         """Items from enabled stores are sent regardless of watchlist status."""
         m = self._patch_all()
         m["get_recipients_for_run"].return_value = [self._recip("a@test.com", "uid-a")]
-        m["load_seen_items"].return_value = []
+        m["load_catalog_state"].return_value = []
         m["broken_binding_checks"].return_value = [
             {"name": "Normal Book", "price": "$10", "store": "UK", "link": "https://n", "in_stock": True},
         ]
@@ -490,18 +498,16 @@ class TestCheckForUpdates(unittest.TestCase):
         """A watched edition (different listing) should still be emailed."""
         m = self._patch_all()
         m["get_recipients_for_run"].return_value = [self._recip("a@test.com", "uid-a")]
-        m["load_seen_items"].return_value = []
+        m["load_catalog_state"].return_value = []
         m["broken_binding_checks"].return_value = [
             {"name": "Watched Book UK", "price": "$10", "store": "Disabled Store", "link": "https://w", "in_stock": True},
         ]
         m["fetch_item_ids_by_link"].return_value = {"https://w": 200}
-        m["fetch_edition_ids_by_item_id"].return_value = {200: 55}
+        m["fetch_edition_ids_by_link"].return_value = {"https://w": 55}
         m["insert_events"].return_value = [{"id": 10, "item_id": 200, "event_type": "New Item"}]
         m["insert_email_log"].return_value = [{"id": 50, "user_id": "uid-a"}]
         m["get_store_preferences_for_users"].return_value = {"uid-a": {"Enabled Store"}}
-        m["get_watchlist_for_users"].return_value = {
-            "uid-a": {"item_ids": set(), "edition_ids": {55}},
-        }
+        m["get_watchlist_for_users"].return_value = {"uid-a": {55}}
 
         lf.check_for_updates()
 
@@ -513,14 +519,14 @@ class TestCheckForUpdates(unittest.TestCase):
         """An item from a disabled store that is NOT watched should be skipped."""
         m = self._patch_all()
         m["get_recipients_for_run"].return_value = [self._recip("a@test.com", "uid-a")]
-        m["load_seen_items"].return_value = []
+        m["load_catalog_state"].return_value = []
         m["broken_binding_checks"].return_value = [
             {"name": "Skipped Book", "price": "$10", "store": "Disabled Store", "link": "https://s", "in_stock": True},
         ]
         m["fetch_item_ids_by_link"].return_value = {"https://s": 77}
         m["insert_events"].return_value = [{"id": 10, "item_id": 77, "event_type": "New Item"}]
         m["get_store_preferences_for_users"].return_value = {"uid-a": {"Enabled Store"}}
-        m["get_watchlist_for_users"].return_value = {"uid-a": {"item_ids": set(), "edition_ids": set()}}
+        m["get_watchlist_for_users"].return_value = {"uid-a": set()}
 
         lf.check_for_updates()
 
@@ -532,7 +538,7 @@ class TestCheckForUpdates(unittest.TestCase):
             self._recip("a@test.com", "uid-a"),
             self._recip("b@test.com", "uid-b"),
         ]
-        m["load_seen_items"].return_value = []
+        m["load_catalog_state"].return_value = []
         m["broken_binding_checks"].return_value = [
             {"name": "Book", "price": "$10", "store": "UK", "link": "https://x", "in_stock": True},
         ]
@@ -557,7 +563,7 @@ class TestCheckForUpdates(unittest.TestCase):
     def test_dev_mode_skips_all_db_writes_but_sends_email(self):
         m = self._patch_all(run_mode="dev")
         m["get_recipients_for_run"].return_value = [self._recip("dev@test.com", "uid-dev")]
-        m["load_seen_items"].return_value = [
+        m["load_catalog_state"].return_value = [
             {"name": "Book A", "price": "$10", "store": "UK", "link": "https://a", "in_stock": False},
         ]
         m["broken_binding_checks"].return_value = [
@@ -568,7 +574,7 @@ class TestCheckForUpdates(unittest.TestCase):
         lf.check_for_updates()
 
         m["send_email"].assert_called_once()
-        m["save_seen_items"].assert_not_called()
+        m["persist_catalog"].assert_not_called()
         m["insert_events"].assert_not_called()
         m["insert_daily_snapshots"].assert_not_called()
         m["insert_email_log"].assert_not_called()

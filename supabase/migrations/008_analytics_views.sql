@@ -1,5 +1,6 @@
 -- ============================================================
 -- Analytics views for dashboard (PostgREST / Supabase JS)
+-- Superseded in production by 014_gold_analytics_views.sql
 -- ============================================================
 
 CREATE OR REPLACE VIEW public.analytics_restock_leaderboard AS
