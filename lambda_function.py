@@ -45,6 +45,7 @@ STORE_PRECEDENCE = {
 
 PRICE_PLACEHOLDER = "No price found"
 NAME_PLACEHOLDER = "No name found"
+MIN_EMAILABLE_PRICE_CHANGE_CENTS = 10  # $0.10; ignore minor seller-side price flicker
 
 def get_supabase():
     global _supabase_client
@@ -60,6 +61,21 @@ def parse_price_cents(price_str):
         return int(round(float(cleaned) * 100))
     except (ValueError, TypeError):
         return None
+
+
+def is_emailable_change(item):
+    """Return True if this changed item should trigger an alert email."""
+    event_type = item.get("event_type")
+    if event_type == "Unknown Change":
+        return False
+    if event_type == "Price Change":
+        old_cents = parse_price_cents(item.get("old_value"))
+        new_cents = parse_price_cents(item.get("new_value"))
+        if old_cents is None or new_cents is None:
+            return False
+        if abs(new_cents - old_cents) <= MIN_EMAILABLE_PRICE_CHANGE_CENTS:
+            return False
+    return True
 
 
 def get_recipients_for_run(run_id):
@@ -661,8 +677,11 @@ def check_for_updates(store_filter=None):
         })
     inserted_events = insert_events(event_rows, run_id) if not dry_run else []
 
-    # Step 6: Send emails for in-stock items only, filtered by store prefs
-    items_to_email = [i for i in unseen_items if i.get("in_stock")]
+    # Step 6: Send emails for in-stock, emailable changes only, filtered by store prefs
+    items_to_email = [
+        i for i in unseen_items
+        if i.get("in_stock") and is_emailable_change(i)
+    ]
 
     if not recipients:
         logger.info(f"[{run_id}] No recipients found; skipping email send.")

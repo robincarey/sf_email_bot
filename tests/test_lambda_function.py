@@ -29,6 +29,40 @@ class TestParsePriceCents(unittest.TestCase):
         self.assertIsNone(lf.parse_price_cents("No price found"))
 
 
+class TestIsEmailableChange(unittest.TestCase):
+
+    def test_unknown_change_not_emailable(self):
+        self.assertFalse(lf.is_emailable_change({"event_type": "Unknown Change"}))
+
+    def test_small_price_change_not_emailable(self):
+        item = {
+            "event_type": "Price Change",
+            "old_value": "$10.00",
+            "new_value": "$10.01",
+        }
+        self.assertFalse(lf.is_emailable_change(item))
+
+    def test_ten_cent_price_change_not_emailable(self):
+        item = {
+            "event_type": "Price Change",
+            "old_value": "$10.00",
+            "new_value": "$10.10",
+        }
+        self.assertFalse(lf.is_emailable_change(item))
+
+    def test_large_price_change_is_emailable(self):
+        item = {
+            "event_type": "Price Change",
+            "old_value": "$10.00",
+            "new_value": "$10.11",
+        }
+        self.assertTrue(lf.is_emailable_change(item))
+
+    def test_other_event_types_are_emailable(self):
+        for event_type in ("New Item", "Restocked", "Store Change"):
+            self.assertTrue(lf.is_emailable_change({"event_type": event_type}))
+
+
 class TestGetRecipientsForRun(unittest.TestCase):
 
     def setUp(self):
@@ -237,6 +271,43 @@ class TestCheckForUpdates(unittest.TestCase):
         self.assertEqual(event_rows[0]["new_value"], "$12")
         self.assertEqual(event_rows[0]["store"], "UK")
         self.assertTrue(event_rows[0]["in_stock"])
+        m["send_email"].assert_called_once()
+
+    def test_small_price_change_does_not_email(self):
+        m = self._patch_all()
+        m["get_recipients_for_run"].return_value = [self._recip("a@test.com")]
+        m["load_seen_items"].return_value = [
+            {"name": "Book A", "price": "$10.00", "store": "UK", "link": "https://a", "in_stock": True},
+        ]
+        m["broken_binding_checks"].return_value = [
+            {"name": "Book A", "price": "$10.01", "store": "UK", "link": "https://a", "in_stock": True},
+        ]
+        m["fetch_item_ids_by_link"].return_value = {"https://a": 1}
+        m["insert_events"].return_value = [{"id": 10, "item_id": 1, "event_type": "Price Change"}]
+
+        lf.check_for_updates()
+
+        event_rows = m["insert_events"].call_args[0][0]
+        self.assertEqual(event_rows[0]["event_type"], "Price Change")
+        m["send_email"].assert_not_called()
+
+    def test_unknown_change_does_not_email(self):
+        m = self._patch_all()
+        m["get_recipients_for_run"].return_value = [self._recip("a@test.com")]
+        m["load_seen_items"].return_value = [
+            {"name": "Old Title", "price": "$10", "store": "UK", "link": "https://a", "in_stock": True},
+        ]
+        m["broken_binding_checks"].return_value = [
+            {"name": "New Title", "price": "$10", "store": "UK", "link": "https://a", "in_stock": True},
+        ]
+        m["fetch_item_ids_by_link"].return_value = {"https://a": 1}
+        m["insert_events"].return_value = [{"id": 10, "item_id": 1, "event_type": "Unknown Change"}]
+
+        lf.check_for_updates()
+
+        event_rows = m["insert_events"].call_args[0][0]
+        self.assertEqual(event_rows[0]["event_type"], "Unknown Change")
+        m["send_email"].assert_not_called()
 
     def test_restock_event(self):
         m = self._patch_all()
