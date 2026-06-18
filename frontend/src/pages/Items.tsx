@@ -15,6 +15,26 @@ type Item = CatalogListing
 
 type StockFilter = 'all' | 'in_stock'
 
+function FilterChip({ label, onRemove, removeLabel }: {
+  label: string
+  onRemove: () => void
+  removeLabel: string
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-alt px-2.5 py-1 text-xs text-text">
+      {label}
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={removeLabel}
+        className="text-text-muted hover:text-text cursor-pointer leading-none"
+      >
+        &times;
+      </button>
+    </span>
+  )
+}
+
 function usePageSize() {
   const [pageSize, setPageSize] = useState(() =>
     window.innerWidth >= 768 ? 50 : 25,
@@ -42,6 +62,7 @@ export default function Items() {
 
   const [stockFilter, setStockFilter] = useState<StockFilter>('all')
   const [storeFilter, setStoreFilter] = useState<string>('all')
+  const [authorFilter, setAuthorFilter] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
 
@@ -92,6 +113,10 @@ export default function Items() {
       result = result.filter((i) => i.store === storeFilter)
     }
 
+    if (authorFilter) {
+      result = result.filter((i) => i.author?.trim() === authorFilter)
+    }
+
     const q = search.toLowerCase().trim()
     if (q) {
       result = result.filter(
@@ -102,11 +127,11 @@ export default function Items() {
     }
 
     return result
-  }, [items, stockFilter, storeFilter, search])
+  }, [items, stockFilter, storeFilter, authorFilter, search])
 
   useEffect(() => {
     setPage(1)
-  }, [stockFilter, storeFilter, search])
+  }, [stockFilter, storeFilter, authorFilter, search])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const safePageNum = Math.min(page, totalPages)
@@ -211,6 +236,25 @@ export default function Items() {
             className="flex-1 rounded-lg border border-border bg-surface text-text text-sm px-3 py-1.5 placeholder:text-text-muted focus:outline-2 focus:outline-brand"
           />
         </div>
+
+        {(authorFilter || storeFilter !== 'all') && (
+          <div className="flex flex-wrap gap-2 mt-3">
+            {authorFilter && (
+              <FilterChip
+                label={`Author: ${authorFilter}`}
+                onRemove={() => setAuthorFilter(null)}
+                removeLabel="Remove author filter"
+              />
+            )}
+            {storeFilter !== 'all' && (
+              <FilterChip
+                label={`Store: ${storeFilter}`}
+                onRemove={() => setStoreFilter('all')}
+                removeLabel="Remove store filter"
+              />
+            )}
+          </div>
+        )}
       </div>
 
       {/* Results info */}
@@ -280,8 +324,32 @@ export default function Items() {
                           {item.name}
                         </a>
                       </td>
-                      <td className="py-2.5 px-3 text-text-muted">{formatAuthor(item.author)}</td>
-                      <td className="py-2.5 px-3 text-text-muted">{item.store || '\u2014'}</td>
+                      <td className="py-2.5 px-3 text-text-muted">
+                        {item.author?.trim() ? (
+                          <button
+                            type="button"
+                            onClick={() => setAuthorFilter(item.author!.trim())}
+                            className="text-brand hover:text-brand-dark hover:underline cursor-pointer text-left"
+                          >
+                            {formatAuthor(item.author)}
+                          </button>
+                        ) : (
+                          formatAuthor(item.author)
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-text-muted">
+                        {item.store ? (
+                          <button
+                            type="button"
+                            onClick={() => setStoreFilter(item.store!)}
+                            className="text-brand hover:text-brand-dark hover:underline cursor-pointer text-left"
+                          >
+                            {item.store}
+                          </button>
+                        ) : (
+                          '\u2014'
+                        )}
+                      </td>
                       <td className="py-2.5 px-3 text-text-muted">{item.price || '\u2014'}</td>
                       <td className="py-2.5 px-3">
                         {item.in_stock ? (
