@@ -10,6 +10,10 @@ from scrapers.broken_binding_sf import broken_binding_checks
 from scrapers.folio_society_sf import folio_society_checks
 from email_notifier import send_email
 from open_library import lookup_author
+from silver_catalog import (
+    build_retailer_listing_row,
+    ensure_catalog_for_item,
+)
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -194,13 +198,9 @@ def save_seen_items(items, run_id):
 
 def upsert_retailer_listings(items, link_to_id, run_id):
     """
-    Dual-write items into the Silver `retailer_listings` table alongside
-    `items_seen`. Resolves `collection_id` via `collections.store_name` and
-    `edition_id` via `(publisher_id, normalized_title)`.
-
-    Must never raise: any failure is logged and swallowed so the legacy
-    pipeline is not blocked. Rows missing a collection, edition, or
-    `items_seen_id` lineage are skipped with a warning.
+    Dual-write items into the Silver layer alongside `items_seen`.
+    Creates missing works/editions when needed, then upserts retailer_listings.
+    Must never raise: failures are logged and swallowed.
     """
     if not items:
         return
@@ -214,26 +214,6 @@ def upsert_retailer_listings(items, link_to_id, run_id):
         )
         collection_map = {r["store_name"]: r for r in (cols_resp.data or [])}
 
-        eds_resp = (
-            get_supabase()
-            .table("editions")
-            .select("id, publisher_id, normalized_title")
-            .execute()
-        )
-        # Narrower key than the documented `editions` uniqueness
-        # `(work_id, publisher_id, normalized_title, coalesce(edition_type, ''))`,
-        # so a collision here means the lookup is ambiguous and callers should
-        # investigate rather than silently pick whichever row happens to win.
-        edition_map = {}
-        for r in (eds_resp.data or []):
-            key = (r["publisher_id"], r["normalized_title"])
-            if key in edition_map:
-                logger.warning(
-                    f"[{run_id}] Ambiguous edition lookup for publisher_id={key[0]} "
-                    f"normalized_title={key[1]!r}: editions {edition_map[key]} and {r['id']}."
-                )
-            edition_map[key] = r["id"]
-
         rows = []
         for item in items:
             store = item.get("store")
@@ -243,43 +223,38 @@ def upsert_retailer_listings(items, link_to_id, run_id):
             if not store or not link or not name:
                 continue
 
-            collection = collection_map.get(store)
-            if not collection:
-                logger.warning(
-                    f"[{run_id}] No collection found for store '{store}'; "
-                    f"skipping retailer_listing."
-                )
-                continue
-
-            normalized = re.sub(r'[^a-z0-9]+', ' ', name.strip().lower()).strip()
-            edition_id = edition_map.get((collection["publisher_id"], normalized))
-            if not edition_id:
-                logger.warning(
-                    f"[{run_id}] No edition found for '{name}' "
-                    f"(publisher {collection['publisher_id']}); skipping retailer_listing."
-                )
-                continue
-
             items_seen_id = link_to_id.get(link)
             if not items_seen_id:
                 logger.warning(
                     f"[{run_id}] No items_seen_id for link {link}; "
-                    f"skipping retailer_listing to preserve Bronze lineage."
+                    f"skipping retailer_listing."
                 )
                 continue
 
-            retailer_url_normalized = re.sub(r'/+$', '', link.split('?')[0].lower())
+            resolved = ensure_catalog_for_item(
+                get_supabase(),
+                title=name,
+                store=store,
+                author=item.get("author"),
+                collection_map=collection_map,
+            )
+            if not resolved:
+                logger.warning(
+                    f"[{run_id}] Could not resolve Silver catalog for '{name}' "
+                    f"(store={store}); skipping retailer_listing."
+                )
+                continue
 
-            rows.append({
-                "edition_id": edition_id,
-                "collection_id": collection["id"],
-                "items_seen_id": items_seen_id,
-                "retailer_url": link,
-                "retailer_url_normalized": retailer_url_normalized,
-                "in_stock": item.get("in_stock"),
-                "price_cents": item.get("typed_price_cents"),
-                "last_checked": datetime.now(timezone.utc).isoformat(),
-            })
+            rows.append(
+                build_retailer_listing_row(
+                    edition_id=resolved["edition_id"],
+                    collection_id=resolved["collection_id"],
+                    items_seen_id=items_seen_id,
+                    link=link,
+                    in_stock=item.get("in_stock"),
+                    price_cents=item.get("typed_price_cents"),
+                )
+            )
 
         if rows:
             get_supabase().table("retailer_listings").upsert(
