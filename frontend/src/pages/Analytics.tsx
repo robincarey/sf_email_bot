@@ -14,9 +14,13 @@ import { useTheme } from '../context/ThemeContext'
 import { formatRelativeTime } from '../lib/eventUtils'
 
 type LeaderboardRow = {
+  edition_id: number
+  work_id?: number
   item_id: number
   restock_count: number
   name: string | null
+  author?: string | null
+  publisher?: string | null
   store: string | null
   link: string | null
 }
@@ -35,20 +39,17 @@ type StoreRow = {
 type PriceDropRow = {
   event_id: number
   item_id: number
+  edition_id?: number
   old_value: string | null
   new_value: string | null
   old_num: string | number | null
   new_num: string | number | null
   price_drop: string | number | null
   name: string | null
+  author?: string | null
+  publisher?: string | null
   store: string | null
   link: string | null
-}
-
-type RecentRestockRow = {
-  id: number
-  event_time: string
-  items_seen: { name: string; link: string; store: string | null } | { name: string; link: string; store: string | null }[] | null
 }
 
 /**
@@ -189,28 +190,24 @@ export default function Analytics() {
 
     ;(async () => {
       const { data, error } = await supabase
-        .from('item_events')
-        .select('id, event_time, items_seen!inner(name, link, store)')
-        .eq('event_type', 'Restocked')
+        .from('analytics_recent_restocks')
+        .select('id, event_time, name, link, store, author')
         .order('event_time', { ascending: false })
         .limit(10)
 
       if (cancelled) return
       if (error) {
-        console.error('recent restocks', error)
+        console.error('analytics_recent_restocks', error)
         setRecentError(error.message)
         setRecent([])
       } else {
-        const normalized = (data ?? []).map((row: RecentRestockRow) => {
-          const item = Array.isArray(row.items_seen) ? row.items_seen[0] ?? null : row.items_seen
-          return {
-            id: row.id,
-            event_time: row.event_time,
-            name: item?.name ?? 'Unknown item',
-            link: item?.link ?? '#',
-            store: item?.store ?? null,
-          }
-        })
+        const normalized = (data ?? []).map((row) => ({
+          id: row.id as number,
+          event_time: row.event_time as string,
+          name: (row.name as string | null) ?? 'Unknown item',
+          link: (row.link as string | null) ?? '#',
+          store: (row.store as string | null) ?? null,
+        }))
         setRecent(normalized)
       }
       setRecentLoading(false)
@@ -329,7 +326,7 @@ export default function Analytics() {
               </thead>
               <tbody>
                 {leaderboard.map((row) => (
-                  <tr key={row.item_id} className="border-b border-border/60 last:border-0">
+                  <tr key={row.edition_id ?? row.item_id} className="border-b border-border/60 last:border-0">
                     <td className="py-2.5 pr-4">
                       {row.link ? (
                         <a

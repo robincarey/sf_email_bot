@@ -61,6 +61,16 @@ Before production reads move from legacy to Silver:
 If any gate fails, read path remains on legacy tables while mapping rules are corrected
 and backfill is rerun.
 
+**Run the gate:**
+
+```bash
+python scripts/silver_quality_gate.py           # report + exit code
+python scripts/silver_quality_gate.py --json    # CI-friendly output
+python scripts/silver_quality_gate.py --strict  # fail on author null-rate warnings
+```
+
+Exit code `0` = pass, `1` = fail. Re-run after any backfill or normalization fix.
+
 ## Rollout and risk controls
 
 - Dual-write transition to avoid feature interruption during migration
