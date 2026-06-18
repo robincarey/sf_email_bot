@@ -12,6 +12,7 @@ import {
 import { supabase } from '../lib/supabase'
 import { useTheme } from '../context/ThemeContext'
 import { formatRelativeTime } from '../lib/eventUtils'
+import { formatAuthor } from '../lib/catalog'
 
 type LeaderboardRow = {
   edition_id: number
@@ -147,7 +148,7 @@ export default function Analytics() {
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null)
 
   const [recent, setRecent] = useState<
-    { id: number; event_time: string; name: string; link: string; store: string | null }[]
+    { id: number; event_time: string; name: string; author: string | null; link: string; store: string | null }[]
   >([])
   const [recentLoading, setRecentLoading] = useState(true)
   const [recentError, setRecentError] = useState<string | null>(null)
@@ -204,7 +205,8 @@ export default function Analytics() {
         const normalized = (data ?? []).map((row) => ({
           id: row.id as number,
           event_time: row.event_time as string,
-          name: (row.name as string | null) ?? 'Unknown item',
+          name: (row.name as string | null) ?? 'Unknown book',
+          author: (row.author as string | null) ?? null,
           link: (row.link as string | null) ?? '#',
           store: (row.store as string | null) ?? null,
         }))
@@ -319,7 +321,8 @@ export default function Analytics() {
             <table className="w-full text-sm text-text">
               <thead>
                 <tr className="border-b border-border text-left text-text-muted">
-                  <th className="pb-2 pr-4 font-medium">Item</th>
+                  <th className="pb-2 pr-4 font-medium">Book</th>
+                  <th className="pb-2 pr-4 font-medium">Author</th>
                   <th className="pb-2 pr-4 font-medium">Store</th>
                   <th className="pb-2 text-right font-medium w-24">Restocks</th>
                 </tr>
@@ -341,6 +344,7 @@ export default function Analytics() {
                         <span className="font-medium">{row.name ?? 'Unknown'}</span>
                       )}
                     </td>
+                    <td className="py-2.5 pr-4 text-text-muted">{formatAuthor(row.author)}</td>
                     <td className="py-2.5 pr-4 text-text-muted">{formatStoreLine(row.store)}</td>
                     <td className="py-2.5 text-right tabular-nums font-medium text-text">
                       {row.restock_count}
@@ -380,6 +384,7 @@ export default function Analytics() {
                         </span>
                       ) : null}
                     </div>
+                    <div className="text-sm text-text-muted mt-0.5">{formatAuthor(r.author)}</div>
                     <div className="text-sm text-text-muted mt-0.5">{formatStoreLine(r.store)}</div>
                   </div>
                   <span className="text-xs text-text-muted whitespace-nowrap shrink-0">
@@ -405,7 +410,8 @@ export default function Analytics() {
             <table className="w-full text-sm text-text">
               <thead>
                 <tr className="border-b border-border text-left text-text-muted">
-                  <th className="pb-2 pr-4 font-medium">Item</th>
+                  <th className="pb-2 pr-4 font-medium">Book</th>
+                  <th className="pb-2 pr-4 font-medium">Author</th>
                   <th className="pb-2 pr-4 font-medium">Store</th>
                   <th className="pb-2 pr-4 font-medium">Was → Now</th>
                   <th className="pb-2 text-right font-medium">Drop</th>
@@ -431,6 +437,7 @@ export default function Analytics() {
                           <span className="font-medium">{row.name ?? 'Unknown'}</span>
                         )}
                       </td>
+                      <td className="py-2.5 pr-4 text-text-muted">{formatAuthor(row.author)}</td>
                       <td className="py-2.5 pr-4 text-text-muted">{formatStoreLine(row.store)}</td>
                       <td className="py-2.5 pr-4 text-text-muted">
                         <span className="line-through opacity-70">{row.old_value ?? '—'}</span>

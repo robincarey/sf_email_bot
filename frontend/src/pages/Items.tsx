@@ -8,7 +8,7 @@ import {
   removeFromWatchlist,
   type WatchlistTargets,
 } from '../lib/watchlist'
-import type { CatalogListing } from '../lib/catalog'
+import { formatAuthor, type CatalogListing } from '../lib/catalog'
 
 type Item = CatalogListing
 
@@ -49,7 +49,7 @@ export default function Items() {
       const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
       const { data, error } = await supabase
         .from('catalog_listings')
-        .select('id, edition_id, name, price, store, link, in_stock, last_in_stock')
+        .select('id, edition_id, name, author, price, store, link, in_stock, last_in_stock')
         .or(`last_in_stock.gte.${cutoff},in_stock.eq.true`)
         .order('name', { ascending: true })
 
@@ -93,7 +93,11 @@ export default function Items() {
 
     const q = search.toLowerCase().trim()
     if (q) {
-      result = result.filter((i) => i.name.toLowerCase().includes(q))
+      result = result.filter(
+        (i) =>
+          i.name.toLowerCase().includes(q) ||
+          (i.author?.toLowerCase().includes(q) ?? false),
+      )
     }
 
     return result
@@ -200,7 +204,7 @@ export default function Items() {
           {/* Search */}
           <input
             type="text"
-            placeholder="Search items..."
+            placeholder="Search books or authors..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="flex-1 rounded-lg border border-border bg-surface text-text text-sm px-3 py-1.5 placeholder:text-text-muted focus:outline-2 focus:outline-brand"
@@ -226,7 +230,8 @@ export default function Items() {
               <thead>
                 <tr className="border-b border-border text-left text-text-muted bg-surface-alt">
                   <th className="py-2 px-3 font-medium w-8"></th>
-                  <th className="py-2 px-3 font-medium">Name</th>
+                  <th className="py-2 px-3 font-medium">Book</th>
+                  <th className="py-2 px-3 font-medium">Author</th>
                   <th className="py-2 px-3 font-medium">Store</th>
                   <th className="py-2 px-3 font-medium">Price</th>
                   <th className="py-2 px-3 font-medium">Status</th>
@@ -262,6 +267,7 @@ export default function Items() {
                           {item.name}
                         </a>
                       </td>
+                      <td className="py-2.5 px-3 text-text-muted">{formatAuthor(item.author)}</td>
                       <td className="py-2.5 px-3 text-text-muted">{item.store || '\u2014'}</td>
                       <td className="py-2.5 px-3 text-text-muted">{item.price || '\u2014'}</td>
                       <td className="py-2.5 px-3">

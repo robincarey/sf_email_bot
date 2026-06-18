@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { eventBadgeColors, formatRelativeTime } from '../lib/eventUtils'
-import type { CatalogRestockFeedItem } from '../lib/catalog'
+import { formatAuthor, type CatalogRestockFeedItem } from '../lib/catalog'
 
 const DEDUPE_WINDOW_MS = 6 * 60 * 60 * 1000 // 6 hours
 
@@ -60,7 +60,7 @@ export default function RecentRestocks() {
     async function fetchEvents() {
       const { data, error } = await supabase
         .from('catalog_restock_feed')
-        .select('id, event_type, event_time, item_id, edition_id, name, link, store, price')
+        .select('id, event_type, event_time, item_id, edition_id, name, author, link, store, price')
         .order('event_time', { ascending: false })
         .limit(20)
 
@@ -119,7 +119,7 @@ export default function RecentRestocks() {
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <div className="min-w-0 font-medium text-text truncate transition-colors group-hover:text-brand-dark">
-                    {evt.name ?? 'Unknown item'}
+                    {evt.name ?? 'Unknown book'}
                   </div>
                   {evt.link ? (
                     <span
@@ -136,7 +136,10 @@ export default function RecentRestocks() {
                     {evt.event_type}
                   </span>
                 </div>
-                <div className="mt-2 text-sm text-text-muted">
+                <div className="mt-1 text-sm text-text-muted truncate">
+                  {formatAuthor(evt.author)}
+                </div>
+                <div className="mt-1 text-sm text-text-muted">
                   <span className="truncate">
                     {storeLine} <span aria-hidden>&middot;</span>{' '}
                     {evt.price ?? '\u2014'}

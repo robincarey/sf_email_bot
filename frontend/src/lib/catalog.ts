@@ -40,3 +40,8 @@ export type CatalogRestockFeedItem = {
   link: string | null
   price: string | null
 }
+
+export function formatAuthor(author: string | null | undefined): string {
+  const trimmed = author?.trim()
+  return trimmed || '\u2014'
+}

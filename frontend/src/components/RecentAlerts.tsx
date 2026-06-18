@@ -9,7 +9,7 @@ import {
   removeFromWatchlist,
   type WatchlistTargets,
 } from '../lib/watchlist'
-import type { CatalogEvent } from '../lib/catalog'
+import { formatAuthor, type CatalogEvent } from '../lib/catalog'
 
 interface RecentAlertsProps {
   onWatchlistChange?: () => void
@@ -33,7 +33,7 @@ export default function RecentAlerts({ onWatchlistChange }: RecentAlertsProps) {
     async function fetchEvents() {
       const { data, error } = await supabase
         .from('catalog_events')
-        .select('id, item_id, edition_id, event_type, store, event_time, in_stock, old_value, new_value, name, link')
+        .select('id, item_id, edition_id, event_type, store, event_time, in_stock, old_value, new_value, name, author, link')
         .order('event_time', { ascending: false })
         .limit(20)
 
@@ -100,7 +100,8 @@ export default function RecentAlerts({ onWatchlistChange }: RecentAlertsProps) {
         <thead>
           <tr className="border-b border-border text-left text-text-muted">
             <th className="pb-2 pr-2 font-medium w-8"></th>
-            <th className="pb-2 pr-4 font-medium">Item</th>
+            <th className="pb-2 pr-4 font-medium">Book</th>
+            <th className="pb-2 pr-4 font-medium">Author</th>
             <th className="pb-2 pr-4 font-medium">Event</th>
             <th className="pb-2 pr-4 font-medium">Store</th>
             <th className="pb-2 font-medium">When</th>
@@ -133,12 +134,13 @@ export default function RecentAlerts({ onWatchlistChange }: RecentAlertsProps) {
                     rel="noopener noreferrer"
                     className="text-brand hover:text-brand-dark font-medium hover:underline"
                   >
-                    {evt.name ?? 'Unknown item'}
+                    {evt.name ?? 'Unknown book'}
                   </a>
                 ) : (
-                  <span className="text-text-muted italic">{evt.name ?? 'Unknown item'}</span>
+                  <span className="text-text-muted italic">{evt.name ?? 'Unknown book'}</span>
                 )}
               </td>
+              <td className="py-3 pr-4 text-text-muted">{formatAuthor(evt.author)}</td>
               <td className="py-3 pr-4">
                 <span
                   className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${

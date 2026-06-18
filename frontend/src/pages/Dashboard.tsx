@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import RecentAlerts from '../components/RecentAlerts'
-import type { CatalogListing } from '../lib/catalog'
+import { formatAuthor, type CatalogListing } from '../lib/catalog'
 
 interface WatchlistItem {
   id: string
@@ -59,7 +59,7 @@ export default function Dashboard() {
     if (editionIds.length > 0) {
       const { data: catalog, error: catalogError } = await supabase
         .from('catalog_listings')
-        .select('edition_id, name, link, store, price, in_stock, last_in_stock')
+        .select('edition_id, name, author, link, store, price, in_stock, last_in_stock')
         .in('edition_id', editionIds)
 
       if (catalogError) {
@@ -160,7 +160,8 @@ export default function Dashboard() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-text-muted">
-                  <th className="pb-2 pr-4 font-medium">Item</th>
+                  <th className="pb-2 pr-4 font-medium">Book</th>
+                  <th className="pb-2 pr-4 font-medium">Author</th>
                   <th className="pb-2 pr-4 font-medium">Store</th>
                   <th className="pb-2 pr-4 font-medium">Price</th>
                   <th className="pb-2 pr-4 font-medium">Status</th>
@@ -184,9 +185,10 @@ export default function Dashboard() {
                             {item.name}
                           </a>
                         ) : (
-                          <span className="font-medium">{item?.name ?? 'Unknown item'}</span>
+                          <span className="font-medium">{item?.name ?? 'Unknown book'}</span>
                         )}
                       </td>
+                      <td className="py-3 pr-4 text-text-muted">{formatAuthor(item?.author)}</td>
                       <td className="py-3 pr-4 text-text-muted">{item?.store || '\u2014'}</td>
                       <td className="py-3 pr-4 text-text-muted">{item?.price || '\u2014'}</td>
                       <td className="py-3 pr-4">
