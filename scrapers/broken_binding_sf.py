@@ -8,6 +8,9 @@ from open_library import extract_isbn_from_text
 
 logger = logging.getLogger(__name__)
 
+# Cap on any single backoff/Retry-After sleep so one throttled product can't stall a run.
+MAX_BACKOFF_SECONDS = 30
+
 # Shopify vendor field is the retailer, not the book author on Broken Binding.
 _IGNORED_SHOPIFY_VENDORS = frozenset(
     {
@@ -71,17 +74,87 @@ def author_from_shopify_json(product_data: dict) -> str | None:
     return vendor.strip()
 
 
-def _get_with_retry(session, url, max_retries=3, timeout=10):
-    """GET with exponential backoff. Raises on final failure."""
+def item_media_from_shopify_js(data: dict) -> tuple[bool, str | None, str | None]:
+    """(in_stock, cover_url, isbn) from a Shopify product `.js` payload.
+
+    Unlike `.json`, the `.js` endpoint includes top-level `available`, so a single
+    request yields stock status plus cover/ISBN — no separate product-page fetch.
+    """
+    in_stock = bool(data.get("available"))
+
+    cover_url = None
+    images = data.get("images") or []
+    if images:
+        cover_url = images[0]
+    elif data.get("featured_image"):
+        cover_url = data.get("featured_image")
+    if cover_url:
+        cover_url = cover_url.strip()
+        if cover_url.startswith("//"):
+            cover_url = "https:" + cover_url
+        cover_url = cover_url or None
+
+    isbn = None
+    for variant in data.get("variants") or []:
+        barcode = (variant.get("barcode") or "").strip().replace("-", "")
+        if barcode:
+            isbn = barcode
+            break
+
+    return in_stock, cover_url, isbn
+
+
+def shopify_js_tags(data: dict) -> list[str]:
+    """Tags from a `.js` payload (list) or `.json` payload (comma string)."""
+    raw = data.get("tags") or []
+    if isinstance(raw, list):
+        return [str(t).strip() for t in raw]
+    return [t.strip() for t in str(raw).split(",")]
+
+
+def _retry_after_seconds(resp) -> float | None:
+    """Parse a Retry-After header in delta-seconds form into float seconds."""
+    if resp is None:
+        return None
+    raw = resp.headers.get("Retry-After")
+    if not raw:
+        return None
+    try:
+        return max(0.0, float(raw))
+    except (TypeError, ValueError):
+        # HTTP-date form is uncommon for Shopify; fall back to backoff.
+        return None
+
+
+def _get_with_retry(session, url, max_retries=4, timeout=15):
+    """GET with retries. Honors Retry-After on 429; raises on final failure.
+
+    Non-429 client errors (e.g. 404) are not retried since they won't recover.
+    """
     for attempt in range(max_retries):
+        resp = None
         try:
             resp = session.get(url, timeout=timeout)
             resp.raise_for_status()
             return resp
+        except requests.HTTPError:
+            status = resp.status_code if resp is not None else None
+            if status is not None and status != 429 and 400 <= status < 500:
+                raise
+            if attempt == max_retries - 1:
+                raise
+            retry_after = _retry_after_seconds(resp)
+            wait = retry_after if retry_after is not None else 2 ** attempt + random.uniform(0, 1)
+            wait = min(wait, MAX_BACKOFF_SECONDS)
+            logger.warning(
+                f"Retry {attempt + 1}/{max_retries} for {url} "
+                f"(status={status}, waiting {wait:.1f}s)"
+            )
+            time.sleep(wait)
         except requests.RequestException:
             if attempt == max_retries - 1:
                 raise
-            wait = 2 ** attempt + random.uniform(0, 1)
+            wait = min(2 ** attempt + random.uniform(0, 1), MAX_BACKOFF_SECONDS)
             logger.warning(f"Retry {attempt + 1}/{max_retries} for {url} (waiting {wait:.1f}s)")
             time.sleep(wait)
 
@@ -138,7 +211,6 @@ def broken_binding_checks():
                     # Ensure these variables always exist even if the page structure changes.
                     in_stock = False
                     link = None
-                    author = None
                     cover_url = None
                     isbn = None
                     heading = product.find("h3", class_="card__heading")
@@ -150,36 +222,22 @@ def broken_binding_checks():
                             continue
 
                         link = "https://thebrokenbindingsub.com" + href
-                        # Check for subscriber-gated products before fetching HTML
-                        product_data = None
-                        try:
-                            json_response = _get_with_retry(session, link + ".json")
-                            product_data = json_response.json()
-                            tags = [t.strip() for t in product_data["product"]["tags"].split(",")]
-                            if "Private Sale" in tags:
-                                logger.info(f"Skipping private sale product: {product_name}")
-                                continue
-                        except requests.RequestException as e:
-                            logger.warning(f"Could not fetch product JSON for {link}, proceeding anyway: {e}")
 
+                        # Single request per product: the `.js` endpoint carries stock
+                        # status, tags, cover and ISBN. Author lives only in the product
+                        # HTML and is not used in notifications, so we skip that extra
+                        # page fetch to halve request volume and avoid rate limiting.
                         try:
-                            product_response = _get_with_retry(session, link)
-                        except requests.RequestException as e:
-                            logger.error(f"Error fetching product {link}: {e}")
+                            js_data = _get_with_retry(session, link + ".js").json()
+                        except (requests.RequestException, ValueError) as e:
+                            logger.error(f"Error fetching {link}.js: {e}; skipping product.")
                             continue
-                        product_soup = BeautifulSoup(product_response.content, "html.parser")
-                        author = extract_product_author(product_soup)
-                        if not author and product_data:
-                            author = author_from_shopify_json(product_data)
-                        if product_data:
-                            cover_url, isbn = cover_and_isbn_from_shopify_json(product_data)
-                        if not isbn:
-                            isbn = extract_isbn_from_html(product_soup)
-                        cart_button = product_soup.find("button", class_="product-form__submit")
-                        if not cart_button or "Sold out" in cart_button.get_text(strip=True):
-                            in_stock = False
-                        else:
-                            in_stock = True
+
+                        if "Private Sale" in shopify_js_tags(js_data):
+                            logger.info(f"Skipping private sale product: {product_name}")
+                            continue
+
+                        in_stock, cover_url, isbn = item_media_from_shopify_js(js_data)
                     else:
                         product_name = "No name found"
 
@@ -198,7 +256,6 @@ def broken_binding_checks():
                         'store': store,
                         'link': link,
                         'in_stock': in_stock,
-                        'author': author,
                         'cover_url': cover_url,
                         'isbn': isbn,
                     })

@@ -801,8 +801,16 @@ def check_for_updates(store_filter=None):
         logger.info(f"[{run_id}] Seed run complete.")
         return
 
-    seen_set = {frozenset(s.items()) for s in seen_items}
-    new_set = {frozenset(n.items()) for n in new_items_canonical}
+    # Diff only on event-relevant fields. Author/cover/isbn are enrichment data,
+    # not change signals — including them would churn every item whenever an
+    # author is corrected or the operational scrape omits it.
+    diff_keys = ("name", "price", "store", "link", "in_stock")
+
+    def _diff_key(item):
+        return frozenset((k, item.get(k)) for k in diff_keys)
+
+    seen_set = {_diff_key(s) for s in seen_items}
+    new_set = {_diff_key(n) for n in new_items_canonical}
     unseen_items_set = new_set.difference(seen_set)
     unseen_items = [dict(x) for x in unseen_items_set]
 
