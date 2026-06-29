@@ -130,6 +130,7 @@ class TestLoadCatalogState(unittest.TestCase):
         items = lf.load_catalog_state("test-run-id")
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]["name"], "Book A")
+        mock_sb.table.assert_called_with("items_seen")
 
     @patch.object(lf, "get_supabase")
     def test_error_returns_empty(self, mock_get_sb):

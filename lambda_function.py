@@ -222,16 +222,21 @@ def fetch_edition_ids_by_link(links, run_id):
 
 
 def load_catalog_state(run_id):
-    """Load current catalog snapshot for diffing (Gold read view)."""
+    """Load Bronze items_seen snapshot for notification diffing.
+
+    Uses items_seen (not catalog_listings) so diffs stay correct even when the
+    Silver/Gold write path is slow or fails. Notifications only need the fields
+    the scraper already writes to Bronze.
+    """
     try:
         response = (
             get_supabase()
-            .table("catalog_listings")
+            .table("items_seen")
             .select("name, price, store, link, in_stock, author")
             .execute()
         )
         items = response.data or []
-        logger.info(f"[{run_id}] Loaded {len(items)} catalog listings for diff.")
+        logger.info(f"[{run_id}] Loaded {len(items)} items_seen rows for diff.")
         return items
     except Exception as e:
         logger.error(f"[{run_id}] Error loading catalog state: {e}")
