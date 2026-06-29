@@ -249,17 +249,40 @@ def save_bronze_items(items, run_id):
         logger.error(f"[{run_id}] Error saving bronze items: {e}")
 
 
-def persist_catalog(items, run_id):
+def persist_bronze(items, run_id):
     """
-    Write scrape results to Bronze (items_seen) and Silver (retailer_listings).
-    Returns {link: items_seen_id} for event and snapshot writes.
+    Write Bronze items_seen and return {link: items_seen_id}.
+
+    Operational / notification path: intentionally cheap (no Silver upserts, no
+    enrichment) so it can run before emails are sent. item_events and the diff
+    only need these IDs.
     """
     if not items:
         return {}
     save_bronze_items(items, run_id)
     links = [item["link"] for item in items if item.get("link")]
-    link_to_id = fetch_item_ids_by_link(links, run_id)
+    return fetch_item_ids_by_link(links, run_id)
+
+
+def persist_silver_catalog(items, link_to_id, run_id):
+    """
+    Write Silver catalog (works / editions / retailer_listings).
+
+    Analytics / enrichment path: heavier per-item upserts. This runs AFTER
+    notifications are sent so it never delays alerts.
+    """
     upsert_retailer_listings(items, link_to_id, run_id)
+
+
+def persist_catalog(items, run_id):
+    """
+    Bronze + Silver in a single pass. Used by seed mode, where there are no
+    notifications to race and ordering is irrelevant.
+    """
+    if not items:
+        return {}
+    link_to_id = persist_bronze(items, run_id)
+    persist_silver_catalog(items, link_to_id, run_id)
     return link_to_id
 
 
@@ -482,6 +505,129 @@ def _build_email_table(items):
         <tbody>{rows}</tbody>
     </table>
     """
+
+
+def send_notifications(
+    *,
+    recipients,
+    unseen_items,
+    stores_by_link,
+    link_to_id,
+    inserted_events,
+    run_id,
+    dry_run,
+):
+    """
+    Send stock-alert emails and write email logs. Returns (attempted, sent).
+
+    This is the operational notification path and is invoked BEFORE the Silver
+    catalog / daily-snapshot (analytics) writes so alerts are never delayed by
+    enrichment work. Watchlist matching relies on editions that already exist
+    from prior runs; brand-new items have no watchers, so resolving editions
+    before the current run's Silver write is safe.
+    """
+    items_to_email = [
+        i for i in unseen_items
+        if i.get("in_stock") and is_emailable_change(i)
+    ]
+
+    if not recipients:
+        logger.info(f"[{run_id}] No recipients found; skipping email send.")
+        return 0, 0
+    if not items_to_email:
+        logger.info(f"[{run_id}] No in-stock items to email; skipping email send.")
+        return 0, 0
+
+    user_ids = [r["id"] for r in recipients if r["id"]]
+    store_prefs = get_store_preferences_for_users(user_ids, run_id)
+    event_prefs = get_event_preferences_for_users(user_ids, run_id)
+    user_watchlists = get_watchlist_for_users(user_ids, run_id)
+
+    edition_by_link = fetch_edition_ids_by_link(
+        [i["link"] for i in items_to_email if i.get("link")],
+        run_id,
+    )
+
+    email_subject = "SFF Stock Alert - New Books Available!"
+    email_results = []
+
+    for recip in recipients:
+        enabled_stores = store_prefs.get(recip["id"])
+        enabled_event_types = event_prefs.get(recip["id"], DEFAULT_EMAILABLE_EVENT_TYPES)
+        watched_edition_ids = user_watchlists.get(recip["id"], set())
+
+        if enabled_stores is not None:
+            recip_items = [
+                i for i in items_to_email
+                if stores_by_link.get(i["link"], set()).intersection(enabled_stores)
+                or edition_by_link.get(i["link"]) in watched_edition_ids
+            ]
+        else:
+            recip_items = items_to_email
+
+        recip_items = [
+            i for i in recip_items
+            if i.get("event_type") in enabled_event_types
+        ]
+
+        if not recip_items:
+            logger.info(f"[{run_id}] No matching items for {recip['email']}; skipping.")
+            continue
+
+        recip_item_ids = {link_to_id[it["link"]] for it in recip_items if it["link"] in link_to_id}
+        recip_event_ids = [evt["id"] for evt in inserted_events if evt["item_id"] in recip_item_ids]
+
+        html_table = _build_email_table(recip_items)
+        message = f"""
+    <html>
+    <body>
+        <p>New book(s) available:</p>
+        {html_table}
+    </body>
+    </html>
+    """
+        try:
+            recip_ses_message_id = send_email(email_subject, message, recip["email"])
+            email_results.append({
+                "user_id": recip["id"], "success": True,
+                "error_message": None, "event_ids": recip_event_ids,
+                "ses_message_id": recip_ses_message_id,
+            })
+        except Exception as e:
+            logger.error(f"[{run_id}] Failed to send email to {recip['email']}: {e}")
+            email_results.append({
+                "user_id": recip["id"], "success": False,
+                "error_message": str(e), "event_ids": recip_event_ids,
+                "ses_message_id": None,
+            })
+
+    sent_count = sum(1 for r in email_results if r["success"])
+    logger.info(f"[{run_id}] Emails sent: {sent_count}/{len(email_results)}.")
+
+    if not dry_run:
+        # Batch insert email_log rows
+        log_rows = [{
+            "user_id": r["user_id"],
+            "run_id": run_id,
+            "subject": email_subject,
+            "success": r["success"],
+            "error_message": r["error_message"],
+            "ses_message_id": r.get("ses_message_id"),
+        } for r in email_results]
+        inserted_logs = insert_email_log(log_rows, run_id)
+
+        # Insert email_log_events junction rows
+        log_idx_to_event_ids = {i: r["event_ids"] for i, r in enumerate(email_results)}
+        junction_rows = []
+        for i, log_row in enumerate(inserted_logs):
+            for event_id in log_idx_to_event_ids.get(i, []):
+                junction_rows.append({
+                    "email_log_id": log_row["id"],
+                    "event_id": event_id,
+                })
+        insert_email_log_events(junction_rows, run_id)
+
+    return len(email_results), sent_count
 
 
 def check_for_updates(store_filter=None):
@@ -713,14 +859,15 @@ def check_for_updates(store_filter=None):
     for item in new_items_canonical:
         item["typed_price_cents"] = parse_price_cents(item.get("price"))
 
+    # ------------------------------------------------------------------
+    # OPERATIONAL PATH — kept lean so notifications go out fast.
+    # The notification path only needs Bronze items_seen IDs and item_events.
+    # ------------------------------------------------------------------
     if not dry_run:
-        all_link_to_id = persist_catalog(new_items_canonical, run_id)
+        all_link_to_id = persist_bronze(new_items_canonical, run_id)
     else:
         all_links = [item["link"] for item in new_items_canonical]
         all_link_to_id = fetch_item_ids_by_link(all_links, run_id)
-
-    if not dry_run:
-        insert_daily_snapshots(new_items_canonical, all_link_to_id, run_id)
 
     # Step 4: Fetch IDs for changed items only (subset for event building)
     link_to_id = {link: all_link_to_id[link] for link in {e["link"] for e in events} if link in all_link_to_id}
@@ -742,124 +889,32 @@ def check_for_updates(store_filter=None):
         })
     inserted_events = insert_events(event_rows, run_id) if not dry_run else []
 
-    # Step 6: Send emails for in-stock, emailable changes only, filtered by store prefs
-    items_to_email = [
-        i for i in unseen_items
-        if i.get("in_stock") and is_emailable_change(i)
-    ]
-
-    if not recipients:
-        logger.info(f"[{run_id}] No recipients found; skipping email send.")
-        if not dry_run:
-            update_run_log(run_id, items_scraped=len(new_items_canonical), events_created=len(inserted_events),
-                           emails_attempted=0, emails_sent=0, status="success")
-        return
-    if not items_to_email:
-        logger.info(f"[{run_id}] No in-stock items to email; skipping email send.")
-        if not dry_run:
-            update_run_log(run_id, items_scraped=len(new_items_canonical), events_created=len(inserted_events),
-                       emails_attempted=0, emails_sent=0, status="success")
-        return
-
-    user_ids = [r["id"] for r in recipients if r["id"]]
-    store_prefs = get_store_preferences_for_users(user_ids, run_id)
-    event_prefs = get_event_preferences_for_users(user_ids, run_id)
-    user_watchlists = get_watchlist_for_users(user_ids, run_id)
-
-    edition_by_link = fetch_edition_ids_by_link(
-        [i["link"] for i in items_to_email if i.get("link")],
-        run_id,
+    # Step 6: Send notification emails — PRIORITY, before any analytics writes.
+    emails_attempted, emails_sent = send_notifications(
+        recipients=recipients,
+        unseen_items=unseen_items,
+        stores_by_link=stores_by_link,
+        link_to_id=link_to_id,
+        inserted_events=inserted_events,
+        run_id=run_id,
+        dry_run=dry_run,
     )
 
-    email_subject = "SFF Stock Alert - New Books Available!"
-
-    email_results = []
-    all_emailed_event_ids = set()
-
-    for recip in recipients:
-        enabled_stores = store_prefs.get(recip["id"])
-        enabled_event_types = event_prefs.get(recip["id"], DEFAULT_EMAILABLE_EVENT_TYPES)
-        watched_edition_ids = user_watchlists.get(recip["id"], set())
-
-        if enabled_stores is not None:
-            recip_items = [
-                i for i in items_to_email
-                if stores_by_link.get(i["link"], set()).intersection(enabled_stores)
-                or edition_by_link.get(i["link"]) in watched_edition_ids
-            ]
-        else:
-            recip_items = items_to_email
-
-        recip_items = [
-            i for i in recip_items
-            if i.get("event_type") in enabled_event_types
-        ]
-
-        if not recip_items:
-            logger.info(f"[{run_id}] No matching items for {recip['email']}; skipping.")
-            continue
-
-        recip_item_ids = {link_to_id[it["link"]] for it in recip_items if it["link"] in link_to_id}
-        recip_event_ids = [evt["id"] for evt in inserted_events if evt["item_id"] in recip_item_ids]
-        all_emailed_event_ids.update(recip_event_ids)
-
-        html_table = _build_email_table(recip_items)
-        message = f"""
-    <html>
-    <body>
-        <p>New book(s) available:</p>
-        {html_table}
-    </body>
-    </html>
-    """
-        try:
-            recip_ses_message_id = send_email(email_subject, message, recip["email"])
-            email_results.append({
-                "user_id": recip["id"], "success": True,
-                "error_message": None, "event_ids": recip_event_ids,
-                "ses_message_id": recip_ses_message_id,
-            })
-        except Exception as e:
-            logger.error(f"[{run_id}] Failed to send email to {recip['email']}: {e}")
-            email_results.append({
-                "user_id": recip["id"], "success": False,
-                "error_message": str(e), "event_ids": recip_event_ids,
-                "ses_message_id": None,
-            })
-
-    sent_count = sum(1 for r in email_results if r["success"])
-    logger.info(f"[{run_id}] Emails sent: {sent_count}/{len(email_results)}.")
-
+    # ------------------------------------------------------------------
+    # ANALYTICS / ENRICHMENT PATH — runs AFTER notifications so it never
+    # delays alerts. Silver catalog (works/editions/retailer_listings) and
+    # daily snapshots feed the dashboard, not the notification.
+    # ------------------------------------------------------------------
     if not dry_run:
-        # Step 7: Batch insert email_log rows
-        log_rows = [{
-            "user_id": r["user_id"],
-            "run_id": run_id,
-            "subject": email_subject,
-            "success": r["success"],
-            "error_message": r["error_message"],
-            "ses_message_id": r.get("ses_message_id"),
-        } for r in email_results]
-        inserted_logs = insert_email_log(log_rows, run_id)
+        persist_silver_catalog(new_items_canonical, all_link_to_id, run_id)
+        insert_daily_snapshots(new_items_canonical, all_link_to_id, run_id)
 
-        # Step 8: Insert email_log_events junction rows
-        log_idx_to_event_ids = {i: r["event_ids"] for i, r in enumerate(email_results)}
-        junction_rows = []
-        for i, log_row in enumerate(inserted_logs):
-            for event_id in log_idx_to_event_ids.get(i, []):
-                junction_rows.append({
-                    "email_log_id": log_row["id"],
-                    "event_id": event_id,
-                })
-        insert_email_log_events(junction_rows, run_id)
-
-        # Step 9: Finalize run_log
         update_run_log(
             run_id,
             items_scraped=len(new_items_canonical),
             events_created=len(inserted_events),
-            emails_attempted=len(email_results),
-            emails_sent=sent_count,
+            emails_attempted=emails_attempted,
+            emails_sent=emails_sent,
             status="success",
         )
     logger.info(f"[{run_id}] Update check complete.")

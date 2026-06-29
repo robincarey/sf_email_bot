@@ -156,7 +156,8 @@ class TestCheckForUpdates(unittest.TestCase):
             "load_catalog_state": patch.object(lf, "load_catalog_state"),
             "broken_binding_checks": patch.object(lf, "broken_binding_checks"),
             "send_email": patch("lambda_function.send_email"),
-            "persist_catalog": patch.object(lf, "persist_catalog"),
+            "persist_bronze": patch.object(lf, "persist_bronze"),
+            "persist_silver_catalog": patch.object(lf, "persist_silver_catalog"),
             "fetch_item_ids_by_link": patch.object(lf, "fetch_item_ids_by_link"),
             "insert_events": patch.object(lf, "insert_events"),
             "insert_email_log": patch.object(lf, "insert_email_log"),
@@ -196,7 +197,7 @@ class TestCheckForUpdates(unittest.TestCase):
             links = [item["link"] for item in items if item.get("link")]
             return mocks["fetch_item_ids_by_link"](links, run_id)
 
-        mocks["persist_catalog"].side_effect = persist_side_effect
+        mocks["persist_bronze"].side_effect = persist_side_effect
         return mocks
 
     def _recip(self, email, uid=None):
@@ -219,7 +220,7 @@ class TestCheckForUpdates(unittest.TestCase):
 
         lf.check_for_updates()
 
-        m["persist_catalog"].assert_called_once()
+        m["persist_bronze"].assert_called_once()
         m["send_email"].assert_called_once()
         m["insert_events"].assert_called_once()
         m["insert_email_log"].assert_called_once()
@@ -258,7 +259,8 @@ class TestCheckForUpdates(unittest.TestCase):
         lf.check_for_updates()
 
         m["send_email"].assert_not_called()
-        m["persist_catalog"].assert_called_once()
+        m["persist_bronze"].assert_called_once()
+        m["persist_silver_catalog"].assert_called_once()
         m["insert_daily_snapshots"].assert_called_once()
 
     def test_price_change_includes_store_and_in_stock(self):
@@ -387,7 +389,8 @@ class TestCheckForUpdates(unittest.TestCase):
 
         lf.check_for_updates()
 
-        m["persist_catalog"].assert_not_called()
+        m["persist_bronze"].assert_not_called()
+        m["persist_silver_catalog"].assert_not_called()
         m["send_email"].assert_not_called()
         m["insert_events"].assert_not_called()
         m["insert_email_log"].assert_not_called()
@@ -416,6 +419,27 @@ class TestCheckForUpdates(unittest.TestCase):
         self.assertEqual(update_kwargs["emails_attempted"], 1)
         self.assertEqual(update_kwargs["emails_sent"], 1)
         self.assertEqual(update_kwargs["status"], "success")
+
+    def test_emails_sent_before_analytics_writes(self):
+        """Notifications must go out before the heavy Silver/snapshot writes."""
+        m = self._patch_all()
+        m["get_recipients_for_run"].return_value = [self._recip("a@test.com", "uid-a")]
+        m["load_catalog_state"].return_value = []
+        m["broken_binding_checks"].return_value = [
+            {"name": "New Book", "price": "$25", "store": "UK", "link": "https://new", "in_stock": True},
+        ]
+        m["fetch_item_ids_by_link"].return_value = {"https://new": 42}
+        m["insert_events"].return_value = [{"id": 100, "item_id": 42, "event_type": "New Item"}]
+        m["insert_email_log"].return_value = [{"id": 200, "user_id": "uid-a"}]
+
+        call_order = []
+        m["send_email"].side_effect = lambda *a, **k: call_order.append("email") or "msg-1"
+        m["persist_silver_catalog"].side_effect = lambda *a, **k: call_order.append("silver")
+        m["insert_daily_snapshots"].side_effect = lambda *a, **k: call_order.append("snapshots")
+
+        lf.check_for_updates()
+
+        self.assertEqual(call_order, ["email", "silver", "snapshots"])
 
     def test_daily_snapshots_called_with_all_items(self):
         m = self._patch_all()
@@ -450,7 +474,7 @@ class TestCheckForUpdates(unittest.TestCase):
 
         lf.check_for_updates()
 
-        saved_items = m["persist_catalog"].call_args[0][0]
+        saved_items = m["persist_bronze"].call_args[0][0]
         self.assertEqual(saved_items[0]["typed_price_cents"], 1099)
 
     def test_email_failure_logged_with_error(self):
@@ -595,7 +619,8 @@ class TestCheckForUpdates(unittest.TestCase):
         lf.check_for_updates()
 
         m["send_email"].assert_called_once()
-        m["persist_catalog"].assert_not_called()
+        m["persist_bronze"].assert_not_called()
+        m["persist_silver_catalog"].assert_not_called()
         m["insert_events"].assert_not_called()
         m["insert_daily_snapshots"].assert_not_called()
         m["insert_email_log"].assert_not_called()
