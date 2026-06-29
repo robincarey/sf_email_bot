@@ -43,6 +43,7 @@ jobs:
               cp lambda_function.py build/ &&
               cp email_notifier.py build/ &&
               cp open_library.py build/ &&
+              cp silver_catalog.py build/ &&
               cp -r scrapers build/scrapers &&
               PYTHONPATH=build python -c 'import supabase, pydantic_core, requests, bs4; print(\"imports ok\")'
             "
